@@ -30,7 +30,7 @@ def archive_parent_file(datfile, archive_dir):
     """
     parentdir, parentname = os.path.split(datfile.parent_file)
     _, parentsubdir = os.path.split(parentdir)
-    newparentname = '_'.join(parentsubdir, parentname)
+    newparentname = '_'.join((parentsubdir, parentname))
     archpath = os.path.join(archive_dir, newparentname)
     if not os.path.exists(datfile.parent_file):
         if os.path.exists(archpath):

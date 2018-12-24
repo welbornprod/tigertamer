@@ -48,7 +48,7 @@ USAGESTR = """{versionstr}
 
     Usage:
         {script} -h | -v
-        {script} -g [-D]
+        {script} -g [-r] [-D]
         {script} [FILE...] [-i dir...] [-n] [-D]
         {script} [FILE...] [-i dir...] [-o dir [-a dir]] [-D]
 
@@ -67,6 +67,7 @@ USAGESTR = """{versionstr}
                                 Use - for stdout output.
         -h,--help             : Show this help message.
         -n,--namesonly        : Just show which files would be generated.
+        -r,--run              : Automatically run with settings in config.
         -v,--version          : Show version.
 """.format(script=SCRIPT, versionstr=VERSIONSTR)
 
@@ -98,6 +99,9 @@ def main(argd):
             'archive_dir': '' if archdir in (None, '-') else archdir,
             'ignore_dirs': tuple(ignore_dirs),
             'geometry': config.get('geometry', ''),
+            'geometry_report': config.get('geometry_report', ''),
+            'auto_exit': config.get('auto_exit', False),
+            'auto_run': argd['--run']
         })
         return load_gui()
 
