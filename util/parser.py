@@ -454,6 +454,7 @@ class MozaikFile(object):
                 )
                 self.fix_filename.reported.add(filename)
             fname = jobname
+            jobname = None
         elif not (jobname or fname):
             # No good job name or dir name.
             if filename not in self.fix_filename.reported:
@@ -462,7 +463,11 @@ class MozaikFile(object):
                 )
                 self.fix_filename.reported.add(filename)
             fname = 'Unknown Job'
-        fname = ' '.join((jobname, fname)).strip()
+            jobname = None
+        if jobname:
+            fname = ' '.join((jobname, fname)).strip()
+        else:
+            fname = fname.strip()
         return '{}[{}in]{}'.format(fname or '', width, '.tiger')
 
     fix_filename.reported = set()

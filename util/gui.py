@@ -206,6 +206,7 @@ class MainWin(tk.Tk):
             padx=2,
         )
 
+# TODO: Make my own dialog, for better formatting with the final report.
     def build_done_msg(self, parent_files, error_files, success_files):
         """ Build a report/message regarding the parent files parsed,
             any errors/error-files, and the success files.
