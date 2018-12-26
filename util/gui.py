@@ -146,6 +146,8 @@ class WinMain(tk.Tk):
             expand='no',
             anchor='nw',
             padx=2,
+            ipadx=8,
+            ipady=8,
         )
         # Set focus to the Run button
         self.btn_run.focus_set()
@@ -163,6 +165,8 @@ class WinMain(tk.Tk):
             expand='no',
             anchor='nw',
             padx=2,
+            ipadx=8,
+            ipady=8,
         )
 
         # A singleton instance for the report window (WinReport)
@@ -412,6 +416,7 @@ class WinMain(tk.Tk):
     def event_cmb_theme_select(self, event):
         self.theme = self.known_themes[self.cmb_theme.current()]
         self.style.theme_use(self.theme)
+        self.config_gui['theme'] = self.theme
 
     def report_closed(self):
         """ Called when the report window is closed. """
@@ -529,6 +534,9 @@ class WinReport(tk.Tk):
             orient='vertical',
             command=self.tree_parent.yview,
         )
+        self.tree_parent.configure(
+            yscrollcommand=self.scroll_parent.set
+        )
         self.scroll_parent.pack(side=tk.RIGHT, fill=tk.Y, expand='no')
 
         # Build error files frame
@@ -562,6 +570,9 @@ class WinReport(tk.Tk):
             orient='vertical',
             command=self.tree_error.yview,
         )
+        self.tree_error.configure(
+            yscrollcommand=self.scroll_error.set
+        )
         self.scroll_error.pack(side=tk.RIGHT, fill=tk.Y, expand='no')
 
         # Build success files frame
@@ -590,6 +601,9 @@ class WinReport(tk.Tk):
             orient='vertical',
             command=self.tree_success.yview,
         )
+        self.tree_success.configure(
+            yscrollcommand=self.scroll_success.set
+        )
         self.scroll_success.pack(side=tk.RIGHT, fill=tk.Y, expand='no')
 
         # Build cmds frame.
@@ -611,7 +625,10 @@ class WinReport(tk.Tk):
             expand='no',
             anchor='nw',
             padx=2,
+            ipadx=8,
+            ipady=8,
         )
+        self.btn_ok.focus_set()
         # Fill tree views.
         self.build_trees()
 
@@ -651,6 +668,7 @@ class WinReport(tk.Tk):
     def destroy(self):
         debug('Saving gui-report config...')
         self.config_gui['geometry_report'] = self.geometry()
+        self.config_gui.pop('auto_run')
         config_save(self.config_gui)
         debug('Calling destroy_cb()...')
         self.destroy_cb()
