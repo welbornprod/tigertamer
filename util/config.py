@@ -22,7 +22,11 @@ SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
 SCRIPTDIR = os.path.abspath(sys.path[0])
 
 CONFIGFILE = os.path.join(SCRIPTDIR, 'tigertamer.json')
-
+ICONFILE = os.path.join(
+    SCRIPTDIR,
+    'resources',
+    'tigertamer-icon.png'
+)
 try:
     config = JSONSettings.from_file(CONFIGFILE)
 except FileNotFoundError:

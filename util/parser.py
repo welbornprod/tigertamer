@@ -89,6 +89,11 @@ def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
             datfiles.extend(
                 get_dir_files(diritem, ext=ext, _level=_level + 1)
             )
+    filelen = len(datfiles)
+    debug('Found {} {}.'.format(
+        filelen,
+        'file' if filelen == 1 else 'files',
+    ))
     return datfiles
 
 

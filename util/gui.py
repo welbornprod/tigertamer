@@ -14,6 +14,7 @@ from tkinter import messagebox
 
 from .config import (
     config_save,
+    ICONFILE,
     NAME,
 )
 from .logger import (
@@ -37,6 +38,14 @@ class WinMain(tk.Tk):
         for key in self.config_gui:
             kwargs.pop(key)
         super().__init__(*args, **kwargs)
+        # Set icon for main window and all children.
+        try:
+            self.main_icon = tk.PhotoImage(master=self, file=ICONFILE)
+            self.iconphoto(True, self.main_icon)
+        except Exception as ex:
+            print_err('Failed to set icon: {}\n{}'.format(ICONFILE, ex))
+            self.main_icon = None
+
         debug_obj(self.config_gui, msg='Using GUI config:')
 
         self.title('Tiger Tamer')
@@ -218,7 +227,7 @@ class WinMain(tk.Tk):
             anchor='nw',
             padx=2,
         )
-        debug('Set {} dir: {}'.format(name, entry.get()))
+        debug('Set {} dir entry: {}'.format(name, entry.get()))
 
         # Button
         btnname = 'btn_{}'.format(name)
@@ -457,6 +466,7 @@ class WinMain(tk.Tk):
                 name,
                 dirpath if dirpath else '<not set>',
             )
+            print_err(msg)
             self.show_error(msg)
             return False
         return True
