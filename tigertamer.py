@@ -10,6 +10,7 @@
 """
 
 import os
+import shutil
 import sys
 
 from colr import (
@@ -20,7 +21,6 @@ from colr import (
 
 from util.config import (
     config,
-    config_gui_set,
     VERSIONSTR,
 )
 from util.gui import load_gui
@@ -49,10 +49,12 @@ USAGESTR = """{versionstr}
     Usage:
         {script} -h | -v
         {script} -g [-r] [-D]
+        {script} (-u | -U) [ARCHIVE_DIR] [-D]
         {script} [FILE...] [-i dir...] [-n] [-D]
         {script} [FILE...] [-i dir...] [-o dir [-a dir]] [-D]
 
     Options:
+        ARCHIVE_DIR           : Directory to look for archive files.
         FILE                  : One or more CSV (.dat) files to parse.
         -a dir,--archive dir  : Directory for completed master files.
                                 Use - to disable archiving.
@@ -68,6 +70,9 @@ USAGESTR = """{versionstr}
         -h,--help             : Show this help message.
         -n,--namesonly        : Just show which files would be generated.
         -r,--run              : Automatically run with settings in config.
+        -u,--unarchive        : Undo any archiving, if possible.
+        -U,--UNARCHIVE        : Undo any archiving, and remove all output
+                                files.
         -v,--version          : Show version.
 """.format(script=SCRIPT, versionstr=VERSIONSTR)
 
@@ -78,13 +83,13 @@ def main(argd):
     debug('Debugging enabled.')
 
     inpaths = argd['FILE'] or config.get('dat_dir', None)
-    if not inpaths:
-        raise InvalidArg('No input files/directories!')
     outdir = (
         argd['--output'] or config.get('tiger_dir', './tigertamer_output')
     )
     archdir = (
-        argd['--archive'] or config.get('archive_dir', './tigertamer_archive')
+        argd['--archive'] or
+        config.get('archive_dir', './tigertamer_archive') or
+        argd['ARCHIVE_DIR']  # Only valid with -u or -U.
     )
     ignore_dirs = set(argd['--ignore'])
     if outdir and (outdir != '-'):
@@ -93,19 +98,36 @@ def main(argd):
         ignore_dirs.add(archdir)
 
     if argd['--gui']:
-        config_gui_set({
-            'dat_dir': inpaths[0] if inpaths else '',
-            'tiger_dir': '' if outdir in (None, '-') else outdir,
-            'archive_dir': '' if archdir in (None, '-') else archdir,
-            'ignore_dirs': tuple(ignore_dirs),
-            'geometry': config.get('geometry', ''),
-            'geometry_report': config.get('geometry_report', ''),
-            'auto_exit': config.get('auto_exit', False),
-            'auto_run': argd['--run']
-        })
-        return load_gui()
+        # The GUI handles arguments differently, send it the correct config.
+        return load_gui(
+            auto_exit=config.get('auto_exit', False),
+            auto_run=argd['--run'],
+            geometry=config.get('geometry', ''),
+            geometry_report=config.get('geometry_report', ''),
+            theme=config.get('theme', ''),
+            archive_dir='' if archdir in (None, '-') else archdir,
+            dat_dir=inpaths[0] if inpaths else '',
+            tiger_dir='' if outdir in (None, '-') else outdir,
+            ignore_dirs=tuple(ignore_dirs),
+        )
+
+    if argd['--unarchive'] or argd['--UNARCHIVE']:
+        if not options_are_set(inpaths, archdir):
+            raise InvalidConfig(
+                '.dat dir and archive dir must be set in config.'
+            )
+        errs = unarchive(inpaths[0], archdir)
+        if argd['--unarchive']:
+            return errs
+        if not options_are_set(outdir):
+            raise InvalidConfig(
+                'Output directory must be set in config.'
+            )
+        return remove_tiger_files(outdir)
 
     # Run in console mode.
+    if not inpaths:
+        raise InvalidArg('No input files/directories!')
     mozfiles = load_moz_files(
         inpaths,
         ignore_dirs=ignore_dirs,
@@ -156,6 +178,128 @@ def handle_moz_file(mozfile, outdir, archive_dir=None, names_only=False):
     return write_tiger_file(mozfile, outdir, archive_dir=archive_dir)
 
 
+def options_are_set(*args):
+    # Returns True if all args have a value, and the '-' flag wasn't used.
+    return all(((s and s != '-') for s in args))
+
+
+def remove_tiger_files(outdir):
+    """ Deletes all .tiger files in `outdir`. """
+    if not os.path.exists(outdir):
+        raise InvalidArg('Output directory doesn\'t exist: {}'.format(
+            outdir,
+        ))
+    try:
+        filepaths = [
+            os.path.join(outdir, s)
+            for s in sorted(os.listdir(outdir))
+            if s.endswith('.tiger')
+        ]
+    except OSError as ex:
+        print_err('Can\'t list files in: {}\n{}'.format(outdir, ex))
+        return 1
+    if not filepaths:
+        print_err('No files to remove: {}'.format(outdir))
+        return 1
+    errs = 0
+    success = 0
+    for filepath in filepaths:
+        try:
+            os.remove(filepath)
+        except OSError as ex:
+            print_err('Can\'t remove file: {}\n{}'.format(filepath, ex))
+            errs += 1
+        else:
+            success += 1
+            status('Removed', filepath)
+
+    status(
+        'Removed Files',
+        '{} ({} {})'.format(
+            success,
+            errs,
+            'Error' if errs == 1 else 'Errors',
+        )
+    )
+    return errs
+
+
+def unarchive(datdir, archdir):
+    """ Unarchive all dat files in `archdir`, and put them in `datdir`. """
+    try:
+        archfiles = os.listdir(archdir)
+        origpaths = (os.path.join(archdir, s) for s in archfiles)
+    except OSError as ex:
+        print_err('Unable to unarchive files!: ({}) {}'.format(
+            type(ex).__name__,
+            ex,
+        ))
+        return 1
+    if not archfiles:
+        print_err('No files to unarchive.')
+        return 1
+
+    relpathpcs = (
+        s.split('_', 1)
+        for s in archfiles
+    )
+    relpaths = []
+    datdirparent, datdirsub = os.path.split(datdir)
+    if not datdirsub:
+        datdirsub = datdirparent
+    for subdir, name in relpathpcs:
+        if datdirsub.endswith(subdir):
+            relpaths.append(name)
+        else:
+            relpaths.append(os.path.join(subdir, name))
+    destpaths = (
+        os.path.join(datdir, s)
+        for s in relpaths
+    )
+    # Sort files by destination path, for printing status.
+    files = sorted(
+        zip(origpaths, destpaths),
+        key=lambda tup: tup[1],
+    )
+    errs = 0
+    success = 0
+    for src, dest in files:
+        destdir = os.path.dirname(dest)
+        if not os.path.exists(destdir):
+            try:
+                debug('Creating directory: {}'.format(destdir))
+                os.mkdir(destdir)
+            except OSError as ex:
+                print_err(
+                    'Cannot create directory: {}\n{}'.format(destdir, ex)
+                )
+                continue
+            else:
+                debug('Created directory: {}'.format(destdir))
+        try:
+            shutil.move(src, dest)
+        except OSError as ex:
+            msg = '\n'.join((
+                'Unable to unarchive/move file:',
+                '{src}',
+                '-> {dest}',
+            )).format(src=src, dest=dest)
+            print_err(msg)
+            errs += 1
+        else:
+            success += 1
+            status('Unarchived', dest)
+    status(
+        'Unarchived Files',
+        '{} ({} {})'.format(
+            success,
+            errs,
+            'Error' if errs == 1 else 'Errors',
+        )
+    )
+    return errs
+
+
 class InvalidArg(ValueError):
     """ Raised when the user has used an invalid argument. """
     def __init__(self, msg=None):
@@ -165,6 +309,13 @@ class InvalidArg(ValueError):
         if self.msg:
             return 'Invalid argument, {}'.format(self.msg)
         return 'Invalid argument!'
+
+
+class InvalidConfig(InvalidArg):
+    def __str__(self):
+        if self.msg:
+            return self.msg
+        return 'Invalid config!'
 
 
 if __name__ == '__main__':

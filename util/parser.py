@@ -61,7 +61,7 @@ def archive_parent_file(datfile, archive_dir):
     else:
         status('Archived', destfile)
 
-    return 0
+    return remove_dir_if_empty(parentdir)
 
 
 def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
@@ -183,6 +183,29 @@ def load_moz_files(filepaths, ignore_dirs=None, ext='.dat'):
                 )
             )
     return files
+
+
+def remove_dir_if_empty(path):
+    """ Remove a directory, if it's empty.
+        Returns an exit status code of 0 if everything went well.
+        Otherwise it returns 1.
+    """
+    try:
+        files = os.listdir(path)
+    except OSError as ex:
+        print_err('Unable to list files: {}\n{}'.format(path, ex))
+        return 1
+    if files:
+        debug('Directory not empty: {}'.format(path))
+        return 0
+    debug('Directory is empty, removing it: {}'.format(path))
+    try:
+        os.rmdir(path)
+    except OSError as ex:
+        print_err('Cannot remove dir: {}\n{}'.format(path, ex))
+        return 1
+    debug('Removed directory: {}'.format(path))
+    return 0
 
 
 def safe_move(src, dest):

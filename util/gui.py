@@ -13,9 +13,7 @@ from tkinter import filedialog
 from tkinter import messagebox
 
 from .config import (
-    config_gui_get,
-    config_gui_merge,
-    config_gui_save,
+    config_save,
     NAME,
 )
 from .logger import (
@@ -34,8 +32,11 @@ class WinMain(tk.Tk):
     default_theme = 'clam'
 
     def __init__(self, *args, **kwargs):
+        self.config_gui = {k: v for k, v in kwargs.items()}
+        # Don't send WinMain kwargs to Tk.
+        for key in self.config_gui:
+            kwargs.pop(key)
         super().__init__(*args, **kwargs)
-        self.config_gui = config_gui_get()
         debug_obj(self.config_gui, msg='Using GUI config:')
 
         self.title('Tiger Tamer')
@@ -377,8 +378,7 @@ class WinMain(tk.Tk):
         self.config_gui['geometry'] = self.geometry()
         self.config_gui['theme'] = self.theme
         self.config_gui['auto_exit'] = self.var_auto_exit.get()
-        config_gui_merge(self.config_gui)
-        config_gui_save()
+        config_save(self.config_gui)
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
 
@@ -641,15 +641,47 @@ class WinReport(tk.Tk):
     def destroy(self):
         debug('Saving gui-report config...')
         self.config_gui['geometry_report'] = self.geometry()
-        config_gui_merge(self.config_gui)
-        config_gui_save()
+        config_save(self.config_gui)
         debug('Calling destroy_cb()...')
         self.destroy_cb()
         debug('Closing report window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
 
 
-def load_gui():
-    win = WinMain()  # noqa
+class TkErrorLogger(object):
+    def __init__(self, func, subst, widget):
+        self.func = func
+        self.subst = subst
+        self.widget = widget
+
+    def __call__(self, *args):
+        try:
+            if self.subst:
+                args = self.subst(*args)
+            return self.func(*args)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as ex:
+            # Log the message, and show an error dialog.
+            print_err('GUI Error: ({})'.format(type(ex).__name__))
+            messagebox.showerror(
+                title='{} - Error'.format(NAME),
+                message=str(ex),
+            )
+            raise
+
+
+# Use TkErrorLogger
+tk.CallWrapper = TkErrorLogger
+
+
+def load_gui(**kwargs):
+    win = WinMain(**kwargs)  # noqa
     debug('Starting main window...')
-    tk.mainloop()
+    try:
+        tk.mainloop()
+    except Exception as ex:
+        print_err('Main loop error: ({})\n{}'.format(
+            type(ex).__name__,
+            ex,
+        ))
