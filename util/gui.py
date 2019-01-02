@@ -11,6 +11,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import filedialog
 from tkinter import messagebox
+from contextlib import suppress
 
 from .config import (
     config_save,
@@ -21,10 +22,15 @@ from .logger import (
     debug,
     debug_err,
     debug_obj,
+    get_debug_mode,
     print_err,
+    set_debug_mode,
 )
 from .parser import (
+    get_archive_info,
+    get_tiger_files,
     load_moz_files,
+    unarchive_file,
     write_tiger_file,
 )
 
@@ -113,6 +119,7 @@ class WinMain(tk.Tk):
             expand='yes',
             padx=1,
         )
+        # Auto exit?
         self.var_auto_exit = tk.BooleanVar()
         self.var_auto_exit.set(self.config_gui.get('auto_exit', False))
         self.chk_auto_exit = ttk.Checkbutton(
@@ -123,6 +130,21 @@ class WinMain(tk.Tk):
             variable=self.var_auto_exit,
         )
         self.chk_auto_exit.pack(
+            side=tk.RIGHT,
+            expand='no',
+        )
+        # Debug mode?
+        self.var_debug = tk.BooleanVar()
+        self.var_debug.set(get_debug_mode())
+        self.chk_debug = ttk.Checkbutton(
+            self.frm_opts,
+            text='Debug mode',
+            onvalue=True,
+            offvalue=False,
+            variable=self.var_debug,
+            command=self.cmd_chk_debug,
+        )
+        self.chk_debug.pack(
             side=tk.RIGHT,
             expand='no',
         )
@@ -151,6 +173,37 @@ class WinMain(tk.Tk):
         )
         # Set focus to the Run button
         self.btn_run.focus_set()
+
+        # Undo menu
+        self.menu_btn_undo = ttk.Menubutton(
+            self.frm_cmds,
+            text='Undo',
+            width=5,
+        )
+        self.menu_undo = tk.Menu(
+            self.menu_btn_undo,
+            cursor='left_ptr',
+            tearoff=0,
+        )
+        self.menu_btn_undo['menu'] = self.menu_undo
+        # Add commands to menu.
+        self.menu_undo.add_command(
+            label='Unarchive',
+            command=self.cmd_menu_unarchive,
+        )
+        self.menu_undo.add_command(
+            label='Remove Tiger Files',
+            command=self.cmd_menu_remove_tiger_files,
+        )
+        self.menu_btn_undo.pack(
+            side=tk.LEFT,
+            fill=tk.NONE,
+            expand='no',
+            anchor='nw',
+            padx=2,
+            ipadx=8,
+            ipady=8,
+        )
 
         # Exit button
         self.btn_exit = ttk.Button(
@@ -285,7 +338,8 @@ class WinMain(tk.Tk):
 
     def cmd_btn_run(self):
         """ Handles btn_run click. """
-        if not self.validate_dirs():
+        # Validate dirs, but allow an empty archive dir.
+        if not self.validate_dirs(ignore_dirs=('archive', )):
             return
 
         self.enable_interface(False)
@@ -342,34 +396,25 @@ class WinMain(tk.Tk):
 
         parentfiles = set(m.parent_file for m in mozfiles)
 
-        # self.report_closed() will re-enable the interface.
-        self.enable_interface(False)
-        reportmsg = 'Success'
-        if error_files:
-            reportmsg = 'Errors: {}'.format(len(error_files))
-
-        self.win_report = WinReport(  # noqa
-            title_msg=reportmsg,
-            config_gui=self.config_gui,
-            theme=self.theme,
-            parent_files=[
-                self.trim_file_path(s) for s in sorted(parentfiles)
-            ],
+        self.show_report(
+            parent_files=parentfiles,
             error_files=[
-                (self.trim_file_path(mozfile.filename), msg)
+                (mozfile.filename, msg)
                 for mozfile, msg in sorted(
                     error_files,
                     key=lambda tup: tup[0].filename
                 )
             ],
             success_files=[
-                (mozfile, tigerpath)
+                tigerpath
                 for mozfile, tigerpath in sorted(
                     success_files,
                     key=lambda tup: tup[1]
                 )
             ],
-            destroy_cb=self.report_closed,
+            allow_auto_exit=True,
+            parent_name='Master',
+            success_name='Tiger',
         )
 
     def cmd_btn_tiger(self):
@@ -382,6 +427,139 @@ class WinMain(tk.Tk):
         debug('Selected new tiger directory: {}'.format(
             self.var_dat.get()
         ))
+
+    def cmd_chk_debug(self):
+        """ Handles chk_debug click. Sets debug mode. """
+        set_debug_mode(self.var_debug.get())
+
+
+    def cmd_menu_remove_tiger_files(self):
+        """ Handles menu_remove_tiger_files click. """
+        if not self.validate_dirs(ignore_dirs=('mozaik', 'archive')):
+            return
+
+        outdir = self.var_tiger.get()
+
+        try:
+            filepaths = get_tiger_files(outdir)
+        except OSError as ex:
+            self.show_error(ex)
+            return
+
+        if not filepaths:
+            self.show_error('No files to remove: {}'.format(outdir))
+            return
+
+        if not self.confirm_remove(filepaths):
+            debug('User cancelled tiger file removal.')
+            return
+        errs = []
+        success = []
+        for filepath in filepaths:
+            try:
+                os.remove(filepath)
+            except OSError as ex:
+                errs.append((filepath, str(ex)))
+                debug_err(
+                    'Failed to remove file: {}\n{}'.format(filepath, ex)
+                )
+            else:
+                debug('Removed tiger file: {}'.format(filepath))
+                success.append(filepath)
+
+        self.show_report(
+            filepaths,
+            errs,
+            success,
+            allow_auto_exit=False,
+            parent_name='Tiger',
+            success_name='Removed Tiger',
+        )
+        return
+
+    def cmd_menu_unarchive(self):
+        """ Handles btn_unarchive click. """
+        debug('Attempting to unarchive files...')
+        # Validate the dirs, but the input, output directory doesn't matter.
+        if not self.validate_dirs(ignore_dirs=('mozaik', 'tiger')):
+            return
+        datdir = self.var_dat.get()
+        archdir = self.var_arch.get()
+        try:
+            files = get_archive_info(datdir, archdir)
+        except (OSError, ValueError) as ex:
+            self.show_error(ex)
+            return
+        if not self.confirm_unarchive(files):
+            debug('User cancelled unarchiving.')
+            return
+
+        errs = []
+        success = []
+
+        archive_files = []
+        for src, dest in files:
+            archive_files.append(src)
+            try:
+                finalpath = unarchive_file(src, dest)
+            except OSError as ex:
+                errs.append((dest, str(ex)))
+            else:
+                success.append(finalpath)
+
+        self.show_report(
+            archive_files,
+            errs,
+            success,
+            allow_auto_exit=False,
+            parent_name='Archive',
+            success_name='Restored',
+        )
+        return
+
+
+    def confirm_remove(self, files):
+        """ Returns True if the user confirms the question. """
+        filelen = len(files)
+        plural = 'file' if filelen == 1 else 'files'
+        msg = '\n'.join((
+            'This will remove {length} tiger {plural}:',
+            '{files}',
+            '\nContinue?',
+        )).format(
+            length=filelen,
+            plural=plural,
+            files='\n'.join(
+                '  {}'.format(self.trim_file_path(s))
+                for s in files
+            )
+        )
+        return self.show_question(
+            msg,
+            title='Remove {} {}?'.format(filelen, plural)
+        )
+
+
+    def confirm_unarchive(self, files):
+        """ Returns True if the user confirms the question. """
+        filelen = len(files)
+        plural = 'file' if filelen == 1 else 'files'
+        msg = '\n'.join((
+            'This will unarchive {length} {plural}:',
+            '{files}',
+            '\nContinue?',
+        )).format(
+            length=filelen,
+            plural=plural,
+            files='\n'.join(
+                '  {}'.format(self.trim_file_path(s))
+                for s, _ in files
+            )
+        )
+        return self.show_question(
+            msg,
+            title='Unarchive {} {}?'.format(filelen, plural)
+        )
 
     def destroy(self):
         debug('Saving gui config...')
@@ -402,7 +580,10 @@ class WinMain(tk.Tk):
         state = 'enabled' if enabled else 'disabled'
         widgets = (
             self.btn_run,
+            self.menu_btn_undo,
             self.btn_exit,
+            self.chk_auto_exit,
+            self.chk_debug,
             self.entry_dat,
             self.btn_dat,
             self.entry_tiger,
@@ -418,10 +599,10 @@ class WinMain(tk.Tk):
         self.style.theme_use(self.theme)
         self.config_gui['theme'] = self.theme
 
-    def report_closed(self):
+    def report_closed(self, allow_auto_exit=True):
         """ Called when the report window is closed. """
         self.enable_interface()
-        if self.var_auto_exit.get():
+        if allow_auto_exit and self.var_auto_exit.get():
             self.destroy()
 
     def show_error(self, msg):
@@ -442,6 +623,38 @@ class WinMain(tk.Tk):
         else:
             messagebox.showinfo(title=title, message=msg)
 
+    def show_question(self, msg, title=None):
+        """ Show a tkinter askyesno dialog. """
+        title = '{} - {}'.format(NAME, title or 'Confirm')
+        return messagebox.askyesno(title=title, message=str(msg))
+
+    def show_report(
+            self, parent_files, error_files, success_files,
+            allow_auto_exit=True, parent_name='Master', success_name='Tiger'):
+        """ Show a report for moz->tiger transformations or unarchiving files
+        """
+        # self.report_closed() will re-enable the interface.
+        self.enable_interface(False)
+        reportmsg = 'Success'
+        if error_files:
+            reportmsg = 'Errors: {}'.format(len(error_files))
+
+        self.win_report = WinReport(  # noqa
+            title_msg=reportmsg,
+            config_gui=self.config_gui,
+            theme=self.theme,
+            parent_files=[self.trim_file_path(s) for s in parent_files],
+            error_files=[
+                (self.trim_file_path(s), m) for s, m in error_files
+            ],
+            success_files=[self.trim_file_path(s) for s in success_files],
+            parent_name=parent_name,
+            success_name=success_name,
+            destroy_cb=lambda: self.report_closed(
+                allow_auto_exit=allow_auto_exit,
+            ),
+        )
+
     @staticmethod
     def trim_file_path(filepath):
         """ Trim most of the directories off of a file path.
@@ -451,7 +664,7 @@ class WinMain(tk.Tk):
         _, subdir = os.path.split(path)
         return os.path.join(subdir, fname)
 
-    def validate_dirs(self):
+    def validate_dirs(self, ignore_dirs=None):
         """ Returns True if all directories are set, and valid.
             Shows an error message if any of them are not.
         """
@@ -461,12 +674,20 @@ class WinMain(tk.Tk):
             ('Archive', self.entry_arch.get()),
         )
         for name, dirpath in dirs:
-            if (name == 'Archive') and (not dirpath):
-                # Allow empty archive dir.
-                continue
+            s = name.split()[0].lower()
+            if (not dirpath) and ignore_dirs:
+                debug('Is empty allowed?: {} in? {!r}'.format(s, ignore_dirs))
+                if s in ignore_dirs:
+                    # Allow empty archive dir or any other named dirs.
+                    debug('Empty directory is okay: {}'.format(s))
+                    continue
             if dirpath and (os.path.exists(dirpath)):
                 continue
-            # Invalid dir.
+            # Invalid dir?
+            debug('Is invalid allowed?: {}'.format(s))
+            if s in ignore_dirs:
+                debug('Invalid is okay: {}'.format(s))
+                continue
             msg = 'Invalid {} directory: {}'.format(
                 name,
                 dirpath if dirpath else '<not set>',
@@ -488,10 +709,18 @@ class WinReport(tk.Tk):
             self.parent_files = kwargs.pop('parent_files')
             # List of (tigerpath, 'message')
             self.error_files = kwargs.pop('error_files')
-            # List of (MozaikFile, tigerpath)
+            # List of (tigerpath, )
             self.success_files = kwargs.pop('success_files')
         except KeyError as ex:
             raise TypeError('Missing required kwarg: {}'.format(ex))
+
+        self.parent_name = kwargs.get('parent_name', 'Master')
+        with suppress(KeyError):
+            kwargs.pop('parent_name')
+        self.success_name = kwargs.get('success_name', 'Tiger')
+        with suppress(KeyError):
+            kwargs.pop('success_name')
+
         super().__init__(*args, **kwargs)
 
         # Report window should stay above the main window.
@@ -511,7 +740,6 @@ class WinReport(tk.Tk):
         # Build parent files frame
         self.frm_parent = ttk.Frame(
             self.frm_main,
-            # text='Master files ({}):'.format(self.parent_len),
             padding='2 2 2 2',
         )
         self.frm_parent.pack(fill=tk.X, expand='yes')
@@ -526,7 +754,10 @@ class WinReport(tk.Tk):
         self.tree_parent.heading(
             'file',
             anchor='w',
-            text=' Master Files: {}'.format(self.parent_len),
+            text=' {} Files: {}'.format(
+                self.parent_name,
+                self.parent_len,
+            ),
         )
         self.tree_parent.tag_configure('parent', foreground='#000068')
         self.scroll_parent = ttk.Scrollbar(
@@ -593,7 +824,10 @@ class WinReport(tk.Tk):
         self.tree_success.heading(
             'file',
             anchor='w',
-            text=' Tiger Files: {}'.format(self.success_len),
+            text=' {} Files: {}'.format(
+                self.success_name,
+                self.success_len,
+            ),
         )
         self.tree_success.tag_configure('success', foreground='#007000')
         self.scroll_success = ttk.Scrollbar(
@@ -639,7 +873,7 @@ class WinReport(tk.Tk):
                 '',
                 tk.END,
                 values=(parentfile, ),
-                text='Master File',
+                text='{} File'.format(self.parent_name or 'Master'),
                 tag='parent',
             )
 
@@ -652,12 +886,12 @@ class WinReport(tk.Tk):
                 tag='error',
             )
 
-        for mozfile, tigerpath in self.success_files:
+        for tigerpath in self.success_files:
             self.tree_success.insert(
                 '',
                 tk.END,
                 values=(tigerpath, ),
-                text='Tiger File',
+                text='{} File'.format(self.success_name or 'Tiger'),
                 tag='success',
             )
 
@@ -668,7 +902,8 @@ class WinReport(tk.Tk):
     def destroy(self):
         debug('Saving gui-report config...')
         self.config_gui['geometry_report'] = self.geometry()
-        self.config_gui.pop('auto_run')
+        with suppress(KeyError):
+            self.config_gui.pop('auto_run')
         config_save(self.config_gui)
         debug('Calling destroy_cb()...')
         self.destroy_cb()
