@@ -10,7 +10,6 @@
 """
 
 import os
-import shutil
 import sys
 
 from colr import (
@@ -32,7 +31,10 @@ from util.logger import (
 )
 from util.parser import (
     create_xml,
+    get_archive_info,
+    get_tiger_files,
     load_moz_files,
+    unarchive_file,
     write_tiger_file,
 )
 
@@ -190,17 +192,15 @@ def remove_tiger_files(outdir):
             outdir,
         ))
     try:
-        filepaths = [
-            os.path.join(outdir, s)
-            for s in sorted(os.listdir(outdir))
-            if s.endswith('.tiger')
-        ]
+        filepaths = get_tiger_files(outdir)
     except OSError as ex:
-        print_err('Can\'t list files in: {}\n{}'.format(outdir, ex))
+        print_err(ex)
         return 1
+
     if not filepaths:
         print_err('No files to remove: {}'.format(outdir))
         return 1
+
     errs = 0
     success = 0
     for filepath in filepaths:
@@ -227,68 +227,21 @@ def remove_tiger_files(outdir):
 def unarchive(datdir, archdir):
     """ Unarchive all dat files in `archdir`, and put them in `datdir`. """
     try:
-        archfiles = os.listdir(archdir)
-        origpaths = (os.path.join(archdir, s) for s in archfiles)
-    except OSError as ex:
-        print_err('Unable to unarchive files!: ({}) {}'.format(
-            type(ex).__name__,
-            ex,
-        ))
+        files = get_archive_info(datdir, archdir)
+    except (OSError, ValueError) as ex:
+        print_err(ex)
         return 1
-    if not archfiles:
-        print_err('No files to unarchive.')
-        return 1
-
-    relpathpcs = (
-        s.split('_', 1)
-        for s in archfiles
-    )
-    relpaths = []
-    datdirparent, datdirsub = os.path.split(datdir)
-    if not datdirsub:
-        datdirsub = datdirparent
-    for subdir, name in relpathpcs:
-        if datdirsub.endswith(subdir):
-            relpaths.append(name)
-        else:
-            relpaths.append(os.path.join(subdir, name))
-    destpaths = (
-        os.path.join(datdir, s)
-        for s in relpaths
-    )
-    # Sort files by destination path, for printing status.
-    files = sorted(
-        zip(origpaths, destpaths),
-        key=lambda tup: tup[1],
-    )
     errs = 0
     success = 0
     for src, dest in files:
-        destdir = os.path.dirname(dest)
-        if not os.path.exists(destdir):
-            try:
-                debug('Creating directory: {}'.format(destdir))
-                os.mkdir(destdir)
-            except OSError as ex:
-                print_err(
-                    'Cannot create directory: {}\n{}'.format(destdir, ex)
-                )
-                continue
-            else:
-                debug('Created directory: {}'.format(destdir))
         try:
-            shutil.move(src, dest)
+            finalpath = unarchive_file(src, dest)
         except OSError as ex:
-            msg = '\n'.join((
-                'Unable to unarchive/move file:',
-                '{src}',
-                '-> {dest}',
-            )).format(src=src, dest=dest)
-            print_err(msg)
+            print_err(ex)
             errs += 1
         else:
+            status('Unarchived', finalpath)
             success += 1
-            status('Unarchived', dest)
     status(
         'Unarchived Files',
         '{} ({} {})'.format(
