@@ -6,8 +6,8 @@
 """
 
 import os
-from lxml.builder import ElementMaker, ET
-
+from lxml.builder import ElementMaker
+from lxml.etree import tostring as et_tostring
 from .config import config
 
 E = ElementMaker(
@@ -72,10 +72,12 @@ settings = {
 def create_xml(mozfile):
     return '\n'.join((
         '<?xml version="1.0" encoding="utf-8"?>',
-        ET.tostring(
+        et_tostring(
             E.CutList(
                 *create_settings(mozfile.filename),
-                *create_pieces(mozfile.parts),
+                E.pieces(
+                    *create_pieces(mozfile.parts),
+                ),
             ),
             pretty_print=True,
         ).decode(),
@@ -91,18 +93,17 @@ def create_piece(mozpart, index):
         ),
         E.length(mozpart.length),
         E.quantity(str(mozpart.count)),
+        E.completed('0'),
     )
 
 
 def create_pieces(mozparts):
-    parts = (
+    return (
         create_piece(part, i + 1)
         for i, part in enumerate(
             sorted(mozparts, key=lambda p: p.no)
         )
     )
-
-    return E.pieces(*parts)
 
 
 def create_settings(filename):
