@@ -64,6 +64,47 @@ def archive_parent_file(datfile, archive_dir):
     return remove_dir_if_empty(parentdir)
 
 
+def get_archive_info(datdir, archdir):
+    """ Get all file paths in the archive directory, and where they would
+        be restored to.
+        Returns [(archivefile, restoretofile), ...]
+    """
+    try:
+        archfiles = os.listdir(archdir)
+        origpaths = (os.path.join(archdir, s) for s in archfiles)
+    except OSError as ex:
+        raise OSError('Unable to unarchive files!: ({}) {}'.format(
+            type(ex).__name__,
+            ex,
+        )) from ex
+
+    if not archfiles:
+        raise ValueError('No files to unarchive.')
+
+    relpathpcs = (
+        s.split('_', 1)
+        for s in archfiles
+    )
+    relpaths = []
+    datdirparent, datdirsub = os.path.split(datdir)
+    if not datdirsub:
+        datdirsub = datdirparent
+    for subdir, name in relpathpcs:
+        if datdirsub.endswith(subdir):
+            relpaths.append(name)
+        else:
+            relpaths.append(os.path.join(subdir, name))
+    destpaths = (
+        os.path.join(datdir, s)
+        for s in relpaths
+    )
+    # Sort files by destination path, for printing status.
+    return sorted(
+        zip(origpaths, destpaths),
+        key=lambda tup: tup[1],
+    )
+
+
 def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
     """ Loads all MozaikFiles contained in a directory. """
     indent = '  ' * _level
@@ -95,6 +136,21 @@ def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
         'file' if filelen == 1 else 'files',
     ))
     return datfiles
+
+
+def get_tiger_files(outdir):
+    """ Return a list of .tiger files in a directory. """
+    try:
+        filepaths = [
+            os.path.join(outdir, s)
+            for s in sorted(os.listdir(outdir))
+            if s.endswith('.tiger')
+        ]
+    except OSError as ex:
+        raise OSError(
+            'Can\'t list files in: {}\n{}'.format(outdir, ex)
+        ) from ex
+    return filepaths
 
 
 def increment_file_path(path):
@@ -232,6 +288,35 @@ def strip_words(s, words):
 
 def trim_cab_count(cabno):
     return re.sub(r'\(\d{1,3}\)', '', cabno)
+
+
+def unarchive_file(src, dest):
+    """ Unarchive a .dat file, restoring it to it's destination.
+        Returns the destination path on success.
+    """
+    destdir = os.path.dirname(dest)
+    if not os.path.exists(destdir):
+        try:
+            debug('Creating directory: {}'.format(destdir))
+            os.mkdir(destdir)
+        except OSError as ex:
+            raise OSError(
+                'Cannot create directory: {}\n{}'.format(destdir, ex)
+            ) from ex
+        else:
+            debug('Created directory: {}'.format(destdir))
+    try:
+        shutil.move(src, dest)
+    except OSError as ex:
+        msg = '\n'.join((
+            'Unable to unarchive/move file:',
+            '{src}',
+            '-> {dest}',
+        )).format(src=src, dest=dest)
+        raise ValueError(msg)
+    else:
+        debug('Moved {} -> {}'.format(src, dest))
+    return dest
 
 
 def write_tiger_file(
