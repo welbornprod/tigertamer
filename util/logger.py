@@ -11,17 +11,20 @@ import os
 import sys
 import traceback
 from contextlib import suppress
+from platform import platform
 
 from colr import (
     auto_disable as colr_auto_disable,
     Colr as C,
 )
-try:
+
+from printdebug import get_lineinfo
+
+if 'linux' in platform().lower():
     from printdebug import DebugColrPrinter as DebugPrinter
-except ImportError:
-    from printdebug import DebugPrinter
 else:
-    from printdebug import get_lineinfo
+    from printdebug import DebugPrinter
+
 
 colr_auto_disable()
 
@@ -31,6 +34,16 @@ SCRIPTDIR = os.path.abspath(sys.path[0])
 LOGFILE = os.path.join(SCRIPTDIR, 'tigertamer.log')
 DEBUG = False
 debugprinter = DebugPrinter()
+if not getattr(debugprinter, 'debug_err'):
+    # Fixing old version of printdebug.
+    def polyfill_debug_err(*args, **kwargs):
+        kwargs['level'] = kwargs.get('level', 0) + 1
+        args = (
+            a if isinstance(a, C) else C(a, 'red')
+            for a in args
+        )
+        return debugprinter.debug(*args, **kwargs)
+    debugprinter.debug_err = polyfill_debug_err
 
 logger = logging.getLogger('tigertamer')
 
@@ -181,6 +194,11 @@ def fix_log_msg(*args, **kwargs):
     return ': '.join((funcinfo, msg))
 
 
+def get_debug_mode():
+    """ Access DEBUG and debugprinter.enabled """
+    return DEBUG or getattr(debugprinter, 'enabled', False)
+
+
 def pop_or(dct, key, default=None):
     """ Like dict.get, except it pops the key afterwards.
         This also works for lists and sets.
@@ -233,8 +251,13 @@ def set_debug_mode(enabled):
     logger.setLevel(
         logging.DEBUG if DEBUG else logging.INFO
     )
-    if not DEBUG:
+    if (not DEBUG) and (not set_debug_mode.warned):
         logger.critical('Only errors will be logged...')
+        set_debug_mode.warned = True
+    logger.info('Debug mode set: {}'.format(enabled))
+
+
+set_debug_mode.warned = False
 
 
 def status(label=None, msg=None):
