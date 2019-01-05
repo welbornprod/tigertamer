@@ -22,7 +22,7 @@ from util.config import (
     config,
     VERSIONSTR,
 )
-from util.gui import load_gui
+from gui.main import load_gui
 from util.logger import (
     debug,
     print_err,
