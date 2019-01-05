@@ -18,18 +18,18 @@ from colr import (
     docopt,
 )
 
-from util.config import (
+from lib.util.config import (
     config,
     VERSIONSTR,
 )
-from gui.main import load_gui
-from util.logger import (
+from lib.gui.main import load_gui
+from lib.util.logger import (
     debug,
     print_err,
     set_debug_mode,
     status,
 )
-from util.parser import (
+from lib.util.parser import (
     create_xml,
     get_archive_info,
     get_tiger_files,
