@@ -30,25 +30,33 @@ from ..util.parser import (
     write_tiger_file,
 )
 
-from common import (
+from .about import WinAbout
+from .common import (
     tk,
     ttk,
     filedialog,
     messagebox,
 )
 
-from report import WinReport
+from .report import WinReport
 
 
 class WinMain(tk.Tk):
     default_theme = 'clam'
 
     def __init__(self, *args, **kwargs):
+        try:
+            self.run_function = kwargs.pop('run_function')
+        except KeyError as ex:
+            raise TypeError(
+                'Missing required kwarg, can be None: {}'.format(ex)
+            )
         self.config_gui = {k: v for k, v in kwargs.items()}
         # Don't send WinMain kwargs to Tk.
         for key in self.config_gui:
             kwargs.pop(key)
         super().__init__(*args, **kwargs)
+
         # Set icon for main window and all children.
         try:
             self.main_icon = tk.PhotoImage(master=self, file=ICONFILE)
@@ -62,7 +70,7 @@ class WinMain(tk.Tk):
         self.title('Tiger Tamer')
         self.geometry(self.config_gui.get('geometry', '331x301'))
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
-        self.frm_main.pack(fill=tk.BOTH, expand='yes')
+        self.frm_main.pack(fill=tk.BOTH, expand=True)
         self.style = ttk.Style()
 
         # knownstyles = ('clam', 'alt', 'default', 'classic')
@@ -76,6 +84,15 @@ class WinMain(tk.Tk):
         self.style.theme_use(usetheme)
         self.theme = usetheme
 
+        # Build main menu.
+        self.menu_main = tk.Menu(self)
+        self.menu_help = tk.Menu(self.menu_main, tearoff=0)
+        self.menu_help.add_command(label='About', command=self.cmd_menu_about)
+        self.menu_main.add_cascade(label='Help', menu=self.menu_help)
+        self.config(menu=self.menu_main)
+        # Singleton instance for the About window.
+        self.win_about = None
+
         # Build directory choosers.
         self.build_dir_frame('dat', 'Mozaik', 'dat_dir')
         self.build_dir_frame('tiger', 'Tiger', 'tiger_dir')
@@ -87,7 +104,7 @@ class WinMain(tk.Tk):
             padding='2 2 2 2',
             borderwidth=2,
         )
-        self.frm_opts_main.pack(fill=tk.X, expand='yes')
+        self.frm_opts_main.pack(fill=tk.X, expand=True)
 
         # Build theme options.
         self.frm_theme = ttk.LabelFrame(
@@ -98,7 +115,7 @@ class WinMain(tk.Tk):
         self.frm_theme.pack(
             side=tk.LEFT,
             fill=tk.X,
-            expand='yes',
+            expand=True,
             padx=1,
         )
         self.cmb_theme = ttk.Combobox(
@@ -106,7 +123,7 @@ class WinMain(tk.Tk):
             state='readonly',
             values=self.known_themes,
         )
-        self.cmb_theme.pack(side=tk.LEFT, fill=tk.X, expand='yes')
+        self.cmb_theme.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.cmb_theme.current(self.known_themes.index(usetheme))
         self.cmb_theme.bind(
             '<<ComboboxSelected>>',
@@ -121,7 +138,7 @@ class WinMain(tk.Tk):
         self.frm_opts.pack(
             side=tk.RIGHT,
             fill=tk.X,
-            expand='yes',
+            expand=True,
             padx=1,
         )
         # Auto exit?
@@ -136,7 +153,7 @@ class WinMain(tk.Tk):
         )
         self.chk_auto_exit.pack(
             side=tk.RIGHT,
-            expand='no',
+            expand=False,
         )
         # Debug mode?
         self.var_debug = tk.BooleanVar()
@@ -151,7 +168,7 @@ class WinMain(tk.Tk):
         )
         self.chk_debug.pack(
             side=tk.RIGHT,
-            expand='no',
+            expand=False,
         )
         # Build Run/Exit buttons frame
         self.frm_cmds = ttk.Frame(
@@ -159,7 +176,7 @@ class WinMain(tk.Tk):
             padding='2 2 2 2',
             borderwidth=2,
         )
-        self.frm_cmds.pack(fill=tk.BOTH, expand='yes')
+        self.frm_cmds.pack(fill=tk.BOTH, expand=True)
         # Run button
         self.btn_run = ttk.Button(
             self.frm_cmds,
@@ -170,7 +187,7 @@ class WinMain(tk.Tk):
         self.btn_run.pack(
             side=tk.LEFT,
             fill=tk.NONE,
-            expand='no',
+            expand=False,
             anchor='nw',
             padx=2,
             ipadx=8,
@@ -190,7 +207,7 @@ class WinMain(tk.Tk):
             cursor='left_ptr',
             tearoff=0,
         )
-        self.menu_btn_undo['menu'] = self.menu_undo
+        self.menu_btn_undo.configure(menu=self.menu_undo)
         # Add commands to menu.
         self.menu_undo.add_command(
             label='Unarchive',
@@ -203,7 +220,7 @@ class WinMain(tk.Tk):
         self.menu_btn_undo.pack(
             side=tk.LEFT,
             fill=tk.NONE,
-            expand='no',
+            expand=False,
             anchor='nw',
             padx=2,
             ipadx=8,
@@ -220,7 +237,7 @@ class WinMain(tk.Tk):
         self.btn_exit.pack(
             side=tk.RIGHT,
             fill=tk.NONE,
-            expand='no',
+            expand=False,
             anchor='nw',
             padx=2,
             ipadx=8,
@@ -233,8 +250,19 @@ class WinMain(tk.Tk):
         # Fix message boxes.
         self.option_add('*Dialog.msg.font', 'Arial 10')
 
+        # Auto run function?
+        if self.run_function:
+            func = getattr(self, self.run_function, None)
+            if func is None:
+                raise ValueError('Invalid function name: {}}'.format(
+                    self.run_function,
+                ))
+            elif not callable(func):
+                raise ValueError('Not callable: {!r}'.format(func))
+            debug('Calling function for user: {}()'.format(self.run_function))
+            func()
         # Auto run?
-        if self.config_gui.get('auto_run', False):
+        elif self.config_gui.get('auto_run', False):
             self.cmd_btn_run()
 
     def build_dir_frame(self, name, proper_name, config_key):
@@ -257,7 +285,7 @@ class WinMain(tk.Tk):
         frm = getattr(self, frmname)
         frm.pack(
             fill=tk.X,
-            expand='yes',
+            expand=True,
             anchor='nw',
             ipadx=4,
             ipady=4,
@@ -285,7 +313,7 @@ class WinMain(tk.Tk):
         entry.pack(
             side=tk.LEFT,
             fill=tk.X,
-            expand='yes',
+            expand=True,
             anchor='nw',
             padx=2,
         )
@@ -310,7 +338,7 @@ class WinMain(tk.Tk):
         btn.pack(
             side=tk.RIGHT,
             fill=tk.NONE,
-            expand='no',
+            expand=False,
             anchor='nw',
             padx=2,
         )
@@ -436,6 +464,16 @@ class WinMain(tk.Tk):
     def cmd_chk_debug(self):
         """ Handles chk_debug click. Sets debug mode. """
         set_debug_mode(self.var_debug.get())
+
+    def cmd_menu_about(self):
+        """ Handles menu_about click. """
+        # destroy_cb will re-enable the interface.
+        self.enable_interface(False)
+        self.win_about = WinAbout(
+            destroy_cb=lambda: self.report_closed(
+                allow_auto_exit=False,
+            ),
+        )
 
     def cmd_menu_remove_tiger_files(self):
         """ Handles menu_remove_tiger_files click. """
@@ -579,7 +617,7 @@ class WinMain(tk.Tk):
         """ Enable/Disable the user interface (while running,
             or after running).
         """
-        state = 'enabled' if enabled else 'disabled'
+        state = tk.NORMAL if enabled else tk.DISABLED
         widgets = (
             self.btn_run,
             self.menu_btn_undo,
@@ -595,6 +633,13 @@ class WinMain(tk.Tk):
         )
         for widget in widgets:
             widget['state'] = state
+
+        # Main menus.
+        menus = (
+            'Help',
+        )
+        for name in menus:
+            self.menu_main.entryconfigure(name, state=state)
 
     def event_cmb_theme_select(self, event):
         self.theme = self.known_themes[self.cmb_theme.current()]

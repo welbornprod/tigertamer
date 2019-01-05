@@ -50,6 +50,7 @@ USAGESTR = """{versionstr}
 
     Usage:
         {script} -h | -v
+        {script} -g [-D] -f func
         {script} -g [-r] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
         {script} [FILE...] [-i dir...] [-n] [-D]
@@ -62,6 +63,7 @@ USAGESTR = """{versionstr}
                                 Use - to disable archiving.
                                 Disabled when printing to stdout.
         -D,--debug            : Show more info while running.
+        -f name, --func name  : Run a function from WinMain for debugging.
         -g,--gui              : Load the Tiger Tamer GUI.
         -i dir,--ignore dir   : One or more directories to ignore when looking
                                 for mozaik files.
@@ -111,6 +113,7 @@ def main(argd):
             dat_dir=inpaths[0] if inpaths else '',
             tiger_dir='' if outdir in (None, '-') else outdir,
             ignore_dirs=tuple(ignore_dirs),
+            run_function=argd['--func'],
         )
 
     if argd['--unarchive'] or argd['--UNARCHIVE']:

@@ -11,6 +11,7 @@ import sys
 from easysettings import JSONSettings
 
 from .logger import (
+    debug,
     debug_err,
     debug_obj,
 )
@@ -29,9 +30,11 @@ ICONFILE = os.path.join(
 )
 try:
     config = JSONSettings.from_file(CONFIGFILE)
+    debug('Loaded config from: {}'.format(CONFIGFILE))
 except FileNotFoundError:
     config = JSONSettings()
     config.filename = CONFIGFILE
+    debug('No config file, starting fresh: {}'.format(CONFIGFILE))
 
 
 def config_save(d=None):

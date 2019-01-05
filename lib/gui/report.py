@@ -13,7 +13,7 @@ from ..util.config import (
 )
 from ..util.logger import debug
 
-from common import (
+from .common import (
     tk,
     ttk,
 )
@@ -54,7 +54,7 @@ class WinReport(tk.Tk):
         self.title('{} - {}'.format(NAME, self.title_msg))
         self.geometry(self.config_gui.get('geometry_report', '331x301'))
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
-        self.frm_main.pack(fill=tk.BOTH, expand='yes')
+        self.frm_main.pack(fill=tk.BOTH, expand=True)
         self.style = ttk.Style()
         self.style.theme_use(self.theme)
 
@@ -63,15 +63,14 @@ class WinReport(tk.Tk):
             self.frm_main,
             padding='2 2 2 2',
         )
-        self.frm_parent.pack(fill=tk.X, expand='yes')
+        self.frm_parent.pack(fill=tk.X, expand=True)
         self.tree_parent = ttk.Treeview(
             self.frm_parent,
             selectmode='none',
             height=3,
         )
-        self.tree_parent.pack(side=tk.LEFT, fill=tk.X, expand='yes')
-        self.tree_parent['columns'] = ('file',)
-        self.tree_parent['show'] = 'headings'
+        self.tree_parent.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.tree_parent.configure(columns=('file', ), show='headings')
         self.tree_parent.heading(
             'file',
             anchor='w',
@@ -89,7 +88,7 @@ class WinReport(tk.Tk):
         self.tree_parent.configure(
             yscrollcommand=self.scroll_parent.set
         )
-        self.scroll_parent.pack(side=tk.RIGHT, fill=tk.Y, expand='no')
+        self.scroll_parent.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
 
         # Build error files frame
         self.frm_error = ttk.Frame(
@@ -97,15 +96,17 @@ class WinReport(tk.Tk):
             # text='Errors ({}):'.format(self.error_len),
             padding='2 2 2 2',
         )
-        self.frm_error.pack(fill=tk.X, expand='yes')
+        self.frm_error.pack(fill=tk.X, expand=True)
         self.tree_error = ttk.Treeview(
             self.frm_error,
             selectmode='none',
             height=5,
         )
-        self.tree_error.pack(side=tk.LEFT, fill=tk.X, expand='yes')
-        self.tree_error['columns'] = ('file', 'message')
-        self.tree_error['show'] = 'headings'
+        self.tree_error.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.tree_error.configure(
+            columns=('file', 'message'),
+            show='headings',
+        )
         self.tree_error.heading(
             'file',
             anchor='w',
@@ -125,23 +126,22 @@ class WinReport(tk.Tk):
         self.tree_error.configure(
             yscrollcommand=self.scroll_error.set
         )
-        self.scroll_error.pack(side=tk.RIGHT, fill=tk.Y, expand='no')
+        self.scroll_error.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
 
         # Build success files frame
         self.frm_success = ttk.Frame(
             self.frm_main,
             padding='2 2 2 2',
         )
-        self.frm_success.pack(fill=tk.X, expand='yes')
+        self.frm_success.pack(fill=tk.X, expand=True)
         self.tree_success = ttk.Treeview(
             self.frm_success,
             selectmode='none',
             height=10,
         )
 
-        self.tree_success.pack(side=tk.LEFT, fill=tk.X, expand='yes')
-        self.tree_success['columns'] = ('file',)
-        self.tree_success['show'] = 'headings'
+        self.tree_success.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.tree_success.configure(columns=('file', ), show='headings')
         self.tree_success.heading(
             'file',
             anchor='w',
@@ -159,14 +159,14 @@ class WinReport(tk.Tk):
         self.tree_success.configure(
             yscrollcommand=self.scroll_success.set
         )
-        self.scroll_success.pack(side=tk.RIGHT, fill=tk.Y, expand='no')
+        self.scroll_success.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
 
         # Build cmds frame.
         self.frm_cmds = ttk.Frame(
             self.frm_main,
             padding='2 2 2 2',
         )
-        self.frm_cmds.pack(fill=tk.X, expand='yes')
+        self.frm_cmds.pack(fill=tk.X, expand=True)
 
         self.btn_ok = ttk.Button(
             self.frm_cmds,
@@ -177,7 +177,7 @@ class WinReport(tk.Tk):
         self.btn_ok.pack(
             side=tk.RIGHT,
             fill=tk.NONE,
-            expand='no',
+            expand=False,
             anchor='nw',
             padx=2,
             ipadx=8,
