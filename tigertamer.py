@@ -107,6 +107,7 @@ def main(argd):
             auto_exit=config.get('auto_exit', False),
             auto_run=argd['--run'],
             geometry=config.get('geometry', ''),
+            geometry_about=config.get('geometry_about', ''),
             geometry_report=config.get('geometry_report', ''),
             theme=config.get('theme', ''),
             archive_dir='' if archdir in (None, '-') else archdir,

@@ -11,21 +11,66 @@ from platform import platform
 from .common import (
     tk,
     ttk,
-    ScrolledText,
 )
 
 from ..util.config import (
     ICONFILE,
     NAME,
     VERSION,
-    config,
     config_save,
+    get_system_info,
 )
 from ..util.logger import (
     debug,
 )
 
 PLATFORM = platform()
+
+
+def humantime_fromsecs(secs):
+    """ Return brief but human-readable string representing time-elapsed
+        since `date`.
+        Arguments:
+            secs       : Seconds to determine time from.
+    """
+
+    if secs < 60:
+        # Seconds (decimal format)
+        return '{:0.1f} seconds'.format(secs)
+
+    minutes, seconds = divmod(secs, 60)
+    minstr = 'minute' if int(minutes) == 1 else 'minutes'
+    secstr = 'second' if seconds == 1 else 'seconds'
+    if minutes < 60:
+        # Minutes and seconds only.
+        if seconds == 0:
+            # minutes
+            return '{:.0f} {}'.format(minutes, minstr)
+        # minutes, seconds
+        return '{:.0f} {}, {:.0f} {}'.format(minutes, minstr, seconds, secstr)
+
+    hours, minutes = divmod(minutes, 60)
+    hourstr = 'hour' if int(hours) == 1 else 'hours'
+    minstr = 'minute' if minutes == 1 else 'minutes'
+    if hours < 24:
+        # Hours, minutes, and seconds only.
+        if minutes == 0:
+            # hours
+            return '{:.0f} {}'.format(hours, hourstr)
+        # hours, minutes
+        return '{:.0f} {}, {:.0f} {}'.format(hours, hourstr, minutes, minstr)
+
+    days, hours = divmod(hours, 24)
+
+    # Days, hours
+    daystr = 'day' if days == 1 else 'days'
+    hourstr = 'hour' if hours == 1 else 'hours'
+    if hours == 0:
+        # days
+        return '{:.0f} {}'.format(days, daystr)
+
+    # days, hours
+    return '{:.0f} {}, {:.0f} {}'.format(days, daystr, hours, hourstr)
 
 
 class WinAbout(tk.Tk):
@@ -74,6 +119,7 @@ class WinAbout(tk.Tk):
         self.lbl_img = ttk.Label(self.frm_img, image=self.img_icon)
         self.lbl_img.image = self.img_icon
         self.lbl_img.grid(row=0, column=0, sticky=tk.NSEW)
+        self.lbl_img.bind('<ButtonRelease>', self.cmd_lbl_img_click)
 
         # ..Main information panel.
         self.frm_tt = ttk.Frame(
@@ -100,6 +146,7 @@ class WinAbout(tk.Tk):
         )
         self.lbl_version.grid(row=1, column=0)
         # ...Author label
+        self.var_author = tk.StringVar()
         self.lbl_author = ttk.Label(
             self.frm_tt,
             text='Christopher Welborn',
@@ -133,7 +180,6 @@ class WinAbout(tk.Tk):
         self.build_info()
         self.text_info.configure(state=tk.DISABLED)
 
-
     def append_info(self, text):
         """ Append lines of information into the text_info Text() widget.
             If a `str` is passed, the text is simply appended with no newline.
@@ -150,12 +196,34 @@ class WinAbout(tk.Tk):
 
     def build_info(self):
         """ Insert machine/app/runtime info into the text_info Text(). """
-        self.append_info((
-            'Platform:',
-            '    {}'.format(PLATFORM),
-            'Python Version:',
-            '    {}'.format(sys.version.replace('\n', ''))
-        ))
+        d = get_system_info()
+        self.append_info(
+            '\n'.join((
+                '      Total Runs: {d[runs]}',
+                '      Total Time: {totaltime}',
+                '    Average Time: {avgtime}',
+                '    Master Files: {d[master_files]}',
+                '     Tiger Files: {d[tiger_files]}',
+                '  Archived Files: {d[archive_files]}',
+                'Unarchived Files: {d[unarchive_files]}',
+                '   Removed Files: {d[remove_files]}',
+                '  Python Version: {d[python_ver]}',
+                '        Platform:',
+                '  {d[platform]}',
+
+            )).format(
+                d=d,
+                avgtime=humantime_fromsecs(
+                    (d['runtime_secs'] or 1) / (d['runs'] or 1)
+                ) or 'n/a',
+                totaltime=humantime_fromsecs(d['runtime_secs']) or 'n/a',
+            )
+        )
+
+    def cmd_lbl_img_click(self, event):
+        """ Handles lbl_img click. """
+        # TODO: Easter Egg.
+        debug('Icon clicked.')
 
     def destroy(self):
         debug('Saving gui-about config...')
@@ -165,4 +233,3 @@ class WinAbout(tk.Tk):
         self.destroy_cb()
         debug('Closing about window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
-

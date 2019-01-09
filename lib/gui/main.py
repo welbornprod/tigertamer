@@ -6,9 +6,10 @@
 """
 
 import os
-
+from time import time
 
 from ..util.config import (
+    config_increment,
     config_save,
     ICONFILE,
     NAME,
@@ -409,6 +410,7 @@ class WinMain(tk.Tk):
             success_files.append((mozfile, tigerpath))
             return 0
 
+        time_start = time()
         errs = 0
         for mozfile in mozfiles:
             try:
@@ -428,6 +430,14 @@ class WinMain(tk.Tk):
                 errs += 1
 
         parentfiles = set(m.parent_file for m in mozfiles)
+
+        config_increment(
+            master_files=len(parentfiles),
+            tiger_files=len(success_files),
+            runs=1,
+            runtime_secs=time() - time_start,
+            default=0,
+        )
 
         self.show_report(
             parent_files=parentfiles,
@@ -470,6 +480,7 @@ class WinMain(tk.Tk):
         # destroy_cb will re-enable the interface.
         self.enable_interface(False)
         self.win_about = WinAbout(
+            geometry_about=self.config_gui['geometry_about'],
             destroy_cb=lambda: self.report_closed(
                 allow_auto_exit=False,
             ),
@@ -508,6 +519,8 @@ class WinMain(tk.Tk):
             else:
                 debug('Removed tiger file: {}'.format(filepath))
                 success.append(filepath)
+
+        config_increment(remove_files=len(success), default=0)
 
         self.show_report(
             filepaths,
@@ -548,6 +561,8 @@ class WinMain(tk.Tk):
                 errs.append((dest, str(ex)))
             else:
                 success.append(finalpath)
+
+        config_increment(unarchive_files=len(success), default=0)
 
         self.show_report(
             archive_files,
@@ -610,6 +625,8 @@ class WinMain(tk.Tk):
         self.config_gui['theme'] = self.theme
         self.config_gui['auto_exit'] = self.var_auto_exit.get()
         config_save(self.config_gui)
+        debug('Saving runtime info...')
+
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
 

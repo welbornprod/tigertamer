@@ -11,6 +11,9 @@ import re
 import shutil
 from contextlib import suppress
 
+from .config import (
+    config_increment,
+)
 from .logger import (
     debug,
     debug_err,
@@ -60,6 +63,7 @@ def archive_parent_file(datfile, archive_dir):
         return 1
     else:
         status('Archived', destfile)
+        config_increment(archive_files=1, default=0)
 
     return remove_dir_if_empty(parentdir)
 

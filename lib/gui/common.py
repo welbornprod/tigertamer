@@ -8,7 +8,6 @@
 import tkinter as tk
 from tkinter import ttk  # noqa (stored here for cleaner API)
 from tkinter import filedialog  # noqa
-from tkinter.scrolledtext import ScrolledText  # noqa
 from tkinter import messagebox
 
 from ..util.logger import print_err
