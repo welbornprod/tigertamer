@@ -27,7 +27,7 @@ from ..util.logger import (
 PLATFORM = platform()
 
 
-def humantime_fromsecs(secs):
+def humantime_fromsecs(secs, float_fmt='0.2f'):
     """ Return brief but human-readable string representing time-elapsed
         since `date`.
         Arguments:
@@ -36,7 +36,8 @@ def humantime_fromsecs(secs):
 
     if secs < 60:
         # Seconds (decimal format)
-        return '{:0.1f} seconds'.format(secs)
+        fmtstr = '{{:{}}} seconds'.format(float_fmt)
+        return fmtstr.format(secs)
 
     minutes, seconds = divmod(secs, 60)
     minstr = 'minute' if int(minutes) == 1 else 'minutes'
@@ -120,6 +121,8 @@ class WinAbout(tk.Tk):
         self.lbl_img.image = self.img_icon
         self.lbl_img.grid(row=0, column=0, sticky=tk.NSEW)
         self.lbl_img.bind('<ButtonRelease>', self.cmd_lbl_img_click)
+        # See self.cmd_lbl_img_click
+        self.img_dimmed = False
 
         # ..Main information panel.
         self.frm_tt = ttk.Frame(
@@ -197,6 +200,12 @@ class WinAbout(tk.Tk):
     def build_info(self):
         """ Insert machine/app/runtime info into the text_info Text(). """
         d = get_system_info()
+        avgtime = (d['runtime_secs'] or 1) / (d['runs'] or 1)
+        debug('Total Time: {}, Runs: {}, Average: {}'.format(
+            d['runtime_secs'],
+            d['runs'],
+            avgtime,
+        ))
         self.append_info(
             '\n'.join((
                 '      Total Runs: {d[runs]}',
@@ -213,17 +222,32 @@ class WinAbout(tk.Tk):
 
             )).format(
                 d=d,
-                avgtime=humantime_fromsecs(
-                    (d['runtime_secs'] or 1) / (d['runs'] or 1)
-                ) or 'n/a',
+                avgtime=humantime_fromsecs(avgtime) or 'n/a',
                 totaltime=humantime_fromsecs(d['runtime_secs']) or 'n/a',
             )
         )
 
     def cmd_lbl_img_click(self, event):
         """ Handles lbl_img click. """
-        # TODO: Easter Egg.
-        debug('Icon clicked.')
+        if self.img_dimmed:
+            self.destroy()
+            return
+        # Dim the icon image, for no good reason.
+        rows = []
+        for y in range(64):
+            cols = []
+            for x in range(64):
+                cols.append(self.img_icon.get(x, y))
+            rows.append(cols)
+
+        for y, row in enumerate(rows):
+            for x, col in enumerate(row):
+                if all(_ == 0 for _ in col):
+                    continue
+                r, g, b = (max(i - 32, 0) for i in col)
+                hexval = '#{r:0>2x}{g:0>2x}{b:0>2x}'.format(r=r, g=g, b=b)
+                self.img_icon.put(hexval.join(('{', '}')), to=(x, y))
+        self.img_dimmed = True
 
     def destroy(self):
         debug('Saving gui-about config...')

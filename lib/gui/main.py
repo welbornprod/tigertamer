@@ -33,6 +33,7 @@ from ..util.parser import (
 
 from .about import WinAbout
 from .common import (
+    create_event_handler,
     tk,
     ttk,
     filedialog,
@@ -85,14 +86,92 @@ class WinMain(tk.Tk):
         self.style.theme_use(usetheme)
         self.theme = usetheme
 
-        # Build main menu.
-        self.menu_main = tk.Menu(self)
-        self.menu_help = tk.Menu(self.menu_main, tearoff=0)
-        self.menu_help.add_command(label='About', command=self.cmd_menu_about)
-        self.menu_main.add_cascade(label='Help', menu=self.menu_help)
-        self.config(menu=self.menu_main)
-        # Singleton instance for the About window.
+        # Fix message boxes.
+        self.option_add('*Dialog.msg.font', 'Arial 10')
+
+        # Singleton instance for the About window (WinAbout.
         self.win_about = None
+        # A singleton instance for the report window (WinReport).
+        self.win_report = None
+
+        # Bind all global hot keys for this window.
+        hotkeys = {
+            'help': {
+                'About': {
+                    'char': 'A',
+                    'func': self.cmd_menu_about,
+                },
+            },
+            'admin': {
+                'Unarchive and Remove Tiger Files': {
+                    'char': 'n',
+                    'func': self.cmd_menu_unarchive_and_remove,
+                },
+                'Remove Tiger Files': {
+                    'char': 'T',
+                    'func': self.cmd_menu_remove_tiger_files,
+                },
+                'Unarchive': {
+                    'char': 'U',
+                    'func': self.cmd_menu_unarchive,
+                },
+            },
+            'btns': {
+                'Run': {
+                    'char': 'R',
+                    'func': self.cmd_btn_run,
+                },
+                'Exit': {
+                    'char': 'x',
+                    'func': self.cmd_btn_exit,
+                },
+            },
+        }
+
+        # Build Main menu.
+        self.menu_main = tk.Menu(self)
+        # Build Admin menu.
+        self.menu_admin = tk.Menu(self.menu_main, tearoff=0)
+        for lbl in sorted(hotkeys['admin']):
+            admininfo = hotkeys['admin'][lbl]
+            self.menu_admin.add_command(
+                label=lbl,
+                underline=lbl.index(admininfo['char']),
+                command=admininfo['func'],
+                accelerator='Ctrl+{}'.format(admininfo['char'].upper()),
+            )
+            self.bind_all(
+                '<Control-{}>'.format(admininfo['char'].lower()),
+                create_event_handler(admininfo['func'])
+            )
+        self.menu_main.add_cascade(
+            label='Admin',
+            menu=self.menu_admin,
+            underline=0,
+        )
+
+        # Build Help menu.
+        self.menu_help = tk.Menu(self.menu_main, tearoff=0)
+        for lbl, helpinfo in hotkeys['help'].items():
+            self.menu_help.add_command(
+                label=lbl,
+                underline=lbl.index(helpinfo['char']),
+                command=helpinfo['func'],
+                accelerator='Ctrl+{}'.format(helpinfo['char'].upper()),
+            )
+            self.bind_all(
+                '<Control-{}>'.format(helpinfo['char'].lower()),
+                lambda event: helpinfo['func']()
+            )
+
+        self.menu_main.add_cascade(
+            label='Help',
+            menu=self.menu_help,
+            underline=0,
+         )
+
+        # Set main menu to root window.
+        self.config(menu=self.menu_main)
 
         # Build directory choosers.
         self.build_dir_frame('dat', 'Mozaik', 'dat_dir')
@@ -179,11 +258,14 @@ class WinMain(tk.Tk):
         )
         self.frm_cmds.pack(fill=tk.BOTH, expand=True)
         # Run button
+        runlbl = 'Run'
+        runinfo = hotkeys['btns'][runlbl]
         self.btn_run = ttk.Button(
             self.frm_cmds,
-            text='Run',
+            text=runlbl,
+            underline=runlbl.index(runinfo['char']),
             width=4,
-            command=self.cmd_btn_run,
+            command=runinfo['func'],
         )
         self.btn_run.pack(
             side=tk.LEFT,
@@ -197,43 +279,15 @@ class WinMain(tk.Tk):
         # Set focus to the Run button
         self.btn_run.focus_set()
 
-        # Undo menu
-        self.menu_btn_undo = ttk.Menubutton(
-            self.frm_cmds,
-            text='Undo',
-            width=5,
-        )
-        self.menu_undo = tk.Menu(
-            self.menu_btn_undo,
-            cursor='left_ptr',
-            tearoff=0,
-        )
-        self.menu_btn_undo.configure(menu=self.menu_undo)
-        # Add commands to menu.
-        self.menu_undo.add_command(
-            label='Unarchive',
-            command=self.cmd_menu_unarchive,
-        )
-        self.menu_undo.add_command(
-            label='Remove Tiger Files',
-            command=self.cmd_menu_remove_tiger_files,
-        )
-        self.menu_btn_undo.pack(
-            side=tk.LEFT,
-            fill=tk.NONE,
-            expand=False,
-            anchor='nw',
-            padx=2,
-            ipadx=8,
-            ipady=8,
-        )
-
         # Exit button
+        exitlbl = 'Exit'
+        exitinfo = hotkeys['btns'][exitlbl]
         self.btn_exit = ttk.Button(
             self.frm_cmds,
-            text='Exit',
+            text=exitlbl,
+            underline=exitlbl.index(exitinfo['char']),
             width=4,
-            command=self.cmd_btn_exit,
+            command=exitinfo['func'],
         )
         self.btn_exit.pack(
             side=tk.RIGHT,
@@ -245,11 +299,12 @@ class WinMain(tk.Tk):
             ipady=8,
         )
 
-        # A singleton instance for the report window (WinReport)
-        self.win_report = None
-
-        # Fix message boxes.
-        self.option_add('*Dialog.msg.font', 'Arial 10')
+        # Bind hotkeys for buttons.
+        for btninfo in hotkeys['btns'].values():
+            self.bind_all(
+                '<Control-{}>'.format(btninfo['char'].lower()),
+                create_event_handler(btninfo['func']),
+            )
 
         # Auto run function?
         if self.run_function:
@@ -497,15 +552,15 @@ class WinMain(tk.Tk):
             filepaths = get_tiger_files(outdir)
         except OSError as ex:
             self.show_error(ex)
-            return
+            return False
 
         if not filepaths:
             self.show_error('No files to remove: {}'.format(outdir))
-            return
+            return False
 
         if not self.confirm_remove(filepaths):
             debug('User cancelled tiger file removal.')
-            return
+            return False
         errs = []
         success = []
         for filepath in filepaths:
@@ -530,24 +585,24 @@ class WinMain(tk.Tk):
             parent_name='Tiger',
             success_name='Removed Tiger',
         )
-        return
+        return True
 
     def cmd_menu_unarchive(self):
         """ Handles btn_unarchive click. """
         debug('Attempting to unarchive files...')
         # Validate the dirs, but the input, output directory doesn't matter.
         if not self.validate_dirs(ignore_dirs=('mozaik', 'tiger')):
-            return
+            return False
         datdir = self.var_dat.get()
         archdir = self.var_arch.get()
         try:
             files = get_archive_info(datdir, archdir)
         except (OSError, ValueError) as ex:
             self.show_error(ex)
-            return
+            return False
         if not self.confirm_unarchive(files):
             debug('User cancelled unarchiving.')
-            return
+            return False
 
         errs = []
         success = []
@@ -572,7 +627,12 @@ class WinMain(tk.Tk):
             parent_name='Archive',
             success_name='Restored',
         )
-        return
+        return True
+
+    def cmd_menu_unarchive_and_remove(self):
+        """ Handles menu->Unarchive and Remove Tiger Files """
+        if self.cmd_menu_unarchive():
+            return self.cmd_menu_remove_tiger_files()
 
     def confirm_remove(self, files):
         """ Returns True if the user confirms the question. """
@@ -637,7 +697,6 @@ class WinMain(tk.Tk):
         state = tk.NORMAL if enabled else tk.DISABLED
         widgets = (
             self.btn_run,
-            self.menu_btn_undo,
             self.btn_exit,
             self.chk_auto_exit,
             self.chk_debug,
@@ -653,6 +712,7 @@ class WinMain(tk.Tk):
 
         # Main menus.
         menus = (
+            'Admin',
             'Help',
         )
         for name in menus:

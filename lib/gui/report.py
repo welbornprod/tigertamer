@@ -171,6 +171,7 @@ class WinReport(tk.Tk):
         self.btn_ok = ttk.Button(
             self.frm_cmds,
             text='Okay',
+            underline=0,
             width=4,
             command=self.cmd_btn_ok,
         )
@@ -184,6 +185,10 @@ class WinReport(tk.Tk):
             ipady=8,
         )
         self.btn_ok.focus_set()
+        self.bind_all(
+            'o',
+            lambda event: self.cmd_btn_ok()
+        )
         # Fill tree views.
         self.build_trees()
 
