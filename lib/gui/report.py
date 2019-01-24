@@ -14,12 +14,13 @@ from ..util.config import (
 from ..util.logger import debug
 
 from .common import (
+    handle_cb,
     tk,
     ttk,
 )
 
 
-class WinReport(tk.Tk):
+class WinReport(tk.Toplevel):
     def __init__(self, *args, **kwargs):
         try:
             self.config_gui = kwargs.pop('config_gui')
@@ -55,8 +56,6 @@ class WinReport(tk.Tk):
         self.geometry(self.config_gui.get('geometry_report', '331x301'))
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
         self.frm_main.pack(fill=tk.BOTH, expand=True)
-        self.style = ttk.Style()
-        self.style.theme_use(self.theme)
 
         # Build parent files frame
         self.frm_parent = ttk.Frame(
@@ -228,10 +227,13 @@ class WinReport(tk.Tk):
     def destroy(self):
         debug('Saving gui-report config...')
         self.config_gui['geometry_report'] = self.geometry()
-        with suppress(KeyError):
-            self.config_gui.pop('auto_run')
         config_save(self.config_gui)
-        debug('Calling destroy_cb()...')
-        self.destroy_cb()
+        # Remove topmost, and hide this report, in case any callbacks want
+        # to show a dialog.
         debug('Closing report window (geometry={!r}).'.format(self.geometry()))
+        self.attributes('-topmost', 0)
+        self.withdraw()
+        self.update()
         super().destroy()
+        debug('Calling destroy_cb({})...'.format(self.destroy_cb))
+        handle_cb(self.destroy_cb)

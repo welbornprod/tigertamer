@@ -9,6 +9,7 @@ import sys
 from platform import platform
 
 from .common import (
+    handle_cb,
     tk,
     ttk,
 )
@@ -74,7 +75,7 @@ def humantime_fromsecs(secs, float_fmt='0.2f'):
     return '{:.0f} {}, {:.0f} {}'.format(days, daystr, hours, hourstr)
 
 
-class WinAbout(tk.Tk):
+class WinAbout(tk.Toplevel):
     def __init__(self, *args, **kwargs):
         self.config_gui = {k: v for k, v in kwargs.items()}
         try:
@@ -89,7 +90,7 @@ class WinAbout(tk.Tk):
 
         # Initialize this window.
         self.title('{} - About'.format(NAME))
-        self.geometry(self.config_gui.get('geometry_about', '442x228'))
+        self.geometry(self.config_gui.get('geometry_about', '442x240'))
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Make the main frame expand.
@@ -106,7 +107,7 @@ class WinAbout(tk.Tk):
             self.frm_main,
             padding='2 2 2 2',
         )
-        self.frm_top.grid(row=0, column=0, sticky=tk.EW)
+        self.frm_top.grid(row=0, column=0, sticky=(tk.N, tk.E, tk.W))
         # Make the children in column 1 expand.
         self.frm_top.columnconfigure(1, weight=1)
         # ..Image
@@ -160,11 +161,11 @@ class WinAbout(tk.Tk):
 
         # .Sys Info Frame
         self.frm_info = ttk.Frame(self.frm_main, padding='2 2 2 2')
-        self.frm_info.grid(row=1, column=0)
+        self.frm_info.grid(row=1, column=0, sticky=tk.NSEW)
         # Make the entry grow.
         for x in range(1):
-            self.frm_info.columnconfigure(x, weight=1)
-            self.frm_info.rowconfigure(x, weight=1)
+            self.frm_info.columnconfigure(x, weight=3)
+            self.frm_info.rowconfigure(x, weight=3)
         # ..Sys Info Scrollbar
         self.scroll_info = ttk.Scrollbar(self.frm_info)
         self.scroll_info.grid(row=0, column=1, sticky=tk.NSEW)
@@ -253,7 +254,9 @@ class WinAbout(tk.Tk):
         debug('Saving gui-about config...')
         self.config_gui['geometry_about'] = self.geometry()
         config_save(self.config_gui)
-        debug('Calling destroy_cb()...')
-        self.destroy_cb()
         debug('Closing about window (geometry={!r}).'.format(self.geometry()))
+        self.attributes('-topmost', 0)
+        self.withdraw()
         super().destroy()
+        debug('Calling destroy_cb({})...'.format(self.destroy_cb))
+        handle_cb(self.destroy_cb)

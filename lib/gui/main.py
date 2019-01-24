@@ -34,13 +34,18 @@ from ..util.parser import (
 from .about import WinAbout
 from .common import (
     create_event_handler,
-    tk,
-    ttk,
     filedialog,
-    messagebox,
+    handle_cb,
+    show_error,
+    show_question,
+    tk,
+    trim_file_path,
+    ttk,
+    validate_dirs,
 )
 
 from .report import WinReport
+from .unarchive import WinUnarchive
 
 
 class WinMain(tk.Tk):
@@ -49,10 +54,8 @@ class WinMain(tk.Tk):
     def __init__(self, *args, **kwargs):
         try:
             self.run_function = kwargs.pop('run_function')
-        except KeyError as ex:
-            raise TypeError(
-                'Missing required kwarg, can be None: {}'.format(ex)
-            )
+        except KeyError:
+            self.run_function = None
         self.config_gui = {k: v for k, v in kwargs.items()}
         # Don't send WinMain kwargs to Tk.
         for key in self.config_gui:
@@ -91,9 +94,10 @@ class WinMain(tk.Tk):
 
         # Singleton instance for the About window (WinAbout.
         self.win_about = None
-        # A singleton instance for the report window (WinReport).
+        # A singleton instance for the Report window (WinReport).
         self.win_report = None
-
+        # A singleton instance for the Unarchive window (WinUnarchive).
+        self.win_unarchive = None
         # Bind all global hot keys for this window.
         hotkeys = {
             'help': {
@@ -439,7 +443,7 @@ class WinMain(tk.Tk):
                 ignore_dirs=self.config_gui['ignore_dirs'],
             )
         except OSError as ex:
-            self.show_error('Cannot load .dat files in: {}\n{}'.format(
+            show_error('Cannot load .dat files in: {}\n{}'.format(
                 mozdir,
                 ex,
             ))
@@ -447,7 +451,7 @@ class WinMain(tk.Tk):
             return
 
         if not mozfiles:
-            self.show_error('No Mozaik (.dat) files found in: {}'.format(
+            show_error('No Mozaik (.dat) files found in: {}'.format(
                 mozdir,
             ))
             self.enable_interface(True)
@@ -535,6 +539,7 @@ class WinMain(tk.Tk):
         # destroy_cb will re-enable the interface.
         self.enable_interface(False)
         self.win_about = WinAbout(
+            self,
             geometry_about=self.config_gui['geometry_about'],
             destroy_cb=lambda: self.report_closed(
                 allow_auto_exit=False,
@@ -551,11 +556,11 @@ class WinMain(tk.Tk):
         try:
             filepaths = get_tiger_files(outdir)
         except OSError as ex:
-            self.show_error(ex)
+            show_error(ex)
             return False
 
         if not filepaths:
-            self.show_error('No files to remove: {}'.format(outdir))
+            show_error('No files to remove: {}'.format(outdir))
             return False
 
         if not self.confirm_remove(filepaths):
@@ -587,52 +592,38 @@ class WinMain(tk.Tk):
         )
         return True
 
-    def cmd_menu_unarchive(self):
+    def cmd_menu_test(self):
+        """ Test menu item, foobjectr dev-related testing. """
+        debug('Test menu clicked.')
+
+    def cmd_menu_unarchive(self, remove_tiger_files=False):
         """ Handles btn_unarchive click. """
-        debug('Attempting to unarchive files...')
-        # Validate the dirs, but the input, output directory doesn't matter.
-        if not self.validate_dirs(ignore_dirs=('mozaik', 'tiger')):
-            return False
-        datdir = self.var_dat.get()
-        archdir = self.var_arch.get()
-        try:
-            files = get_archive_info(datdir, archdir)
-        except (OSError, ValueError) as ex:
-            self.show_error(ex)
-            return False
-        if not self.confirm_unarchive(files):
-            debug('User cancelled unarchiving.')
+        if not self.validate_dirs(ignore_dirs=('tiger', 'mozaik')):
             return False
 
-        errs = []
-        success = []
+        if remove_tiger_files:
+            report_cb = self.cmd_menu_remove_tiger_files
+        else:
+            report_cb = None
 
-        archive_files = []
-        for src, dest in files:
-            archive_files.append(src)
-            try:
-                finalpath = unarchive_file(src, dest)
-            except OSError as ex:
-                errs.append((dest, str(ex)))
-            else:
-                success.append(finalpath)
-
-        config_increment(unarchive_files=len(success), default=0)
-
-        self.show_report(
-            archive_files,
-            errs,
-            success,
-            allow_auto_exit=False,
-            parent_name='Archive',
-            success_name='Restored',
+        self.enable_interface(False)
+        self.win_unarchive = WinUnarchive(
+            self,
+            config_gui={
+                'geometry_report': self.config_gui['geometry_report'],
+                'geometry_unarchive': self.config_gui['geometry_unarchive'],
+            },
+            theme=self.theme,
+            destroy_cb=lambda: self.enable_interface(True),
+            report_cb=report_cb,
+            arch_dir=self.entry_arch.get(),
+            dat_dir=self.entry_dat.get(),
         )
         return True
 
     def cmd_menu_unarchive_and_remove(self):
         """ Handles menu->Unarchive and Remove Tiger Files """
-        if self.cmd_menu_unarchive():
-            return self.cmd_menu_remove_tiger_files()
+        return self.cmd_menu_unarchive(remove_tiger_files=True)
 
     def confirm_remove(self, files):
         """ Returns True if the user confirms the question. """
@@ -646,34 +637,13 @@ class WinMain(tk.Tk):
             length=filelen,
             plural=plural,
             files='\n'.join(
-                '  {}'.format(self.trim_file_path(s))
+                '  {}'.format(trim_file_path(s))
                 for s in files
             )
         )
-        return self.show_question(
+        return show_question(
             msg,
             title='Remove {} {}?'.format(filelen, plural)
-        )
-
-    def confirm_unarchive(self, files):
-        """ Returns True if the user confirms the question. """
-        filelen = len(files)
-        plural = 'file' if filelen == 1 else 'files'
-        msg = '\n'.join((
-            'This will unarchive {length} {plural}:',
-            '{files}',
-            '\nContinue?',
-        )).format(
-            length=filelen,
-            plural=plural,
-            files='\n'.join(
-                '  {}'.format(self.trim_file_path(s))
-                for s, _ in files
-            )
-        )
-        return self.show_question(
-            msg,
-            title='Unarchive {} {}?'.format(filelen, plural)
         )
 
     def destroy(self):
@@ -723,34 +693,11 @@ class WinMain(tk.Tk):
         self.style.theme_use(self.theme)
         self.config_gui['theme'] = self.theme
 
-    def report_closed(self, allow_auto_exit=True):
+    def report_closed(self, allow_auto_exit=False):
         """ Called when the report window is closed. """
         self.enable_interface()
         if allow_auto_exit and self.var_auto_exit.get():
             self.destroy()
-
-    def show_error(self, msg):
-        """ Show a tkinter error dialog. """
-        title = '{} - Error'.format(NAME)
-        messagebox.showerror(title=title, message=str(msg))
-
-    def show_done_msg(self, msg, errors=0):
-        titletype = 'Success'
-        if errors:
-            titletype = '{} {}'.format(
-                errors,
-                'Error' if errors == 1 else 'Errors',
-            )
-        title = '{} - {}'.format(NAME, titletype)
-        if errors:
-            messagebox.showerror(title=title, message=msg)
-        else:
-            messagebox.showinfo(title=title, message=msg)
-
-    def show_question(self, msg, title=None):
-        """ Show a tkinter askyesno dialog. """
-        title = '{} - {}'.format(NAME, title or 'Confirm')
-        return messagebox.askyesno(title=title, message=str(msg))
 
     def show_report(
             self, parent_files, error_files, success_files,
@@ -764,14 +711,17 @@ class WinMain(tk.Tk):
             reportmsg = 'Errors: {}'.format(len(error_files))
 
         self.win_report = WinReport(  # noqa
+            self,
             title_msg=reportmsg,
-            config_gui=self.config_gui,
+            config_gui={
+                'geometry_report': self.config_gui['geometry_report'],
+            },
             theme=self.theme,
-            parent_files=[self.trim_file_path(s) for s in parent_files],
+            parent_files=[trim_file_path(s) for s in parent_files],
             error_files=[
-                (self.trim_file_path(s), m) for s, m in error_files
+                (trim_file_path(s), m) for s, m in error_files
             ],
-            success_files=[self.trim_file_path(s) for s in success_files],
+            success_files=[trim_file_path(s) for s in success_files],
             parent_name=parent_name,
             success_name=success_name,
             destroy_cb=lambda: self.report_closed(
@@ -779,47 +729,16 @@ class WinMain(tk.Tk):
             ),
         )
 
-    @staticmethod
-    def trim_file_path(filepath):
-        """ Trim most of the directories off of a file path.
-            Leaves only the file name, and one sub directory.
-        """
-        path, fname = os.path.split(filepath)
-        _, subdir = os.path.split(path)
-        return os.path.join(subdir, fname)
-
     def validate_dirs(self, ignore_dirs=None):
         """ Returns True if all directories are set, and valid.
             Shows an error message if any of them are not.
         """
-        dirs = (
-            ('Mozaik (.dat)', self.entry_dat.get()),
-            ('Tiger (.tiger)', self.entry_tiger.get()),
-            ('Archive', self.entry_arch.get()),
+        return validate_dirs(
+            dat_dir=self.entry_dat.get(),
+            tiger_dir=self.entry_tiger.get(),
+            arch_dir=self.entry_arch.get(),
+            ignore_dirs=ignore_dirs,
         )
-        for name, dirpath in dirs:
-            s = name.split()[0].lower()
-            if (not dirpath) and ignore_dirs:
-                debug('Is empty allowed?: {} in? {!r}'.format(s, ignore_dirs))
-                if s in ignore_dirs:
-                    # Allow empty archive dir or any other named dirs.
-                    debug('Empty directory is okay: {}'.format(s))
-                    continue
-            if dirpath and (os.path.exists(dirpath)):
-                continue
-            # Invalid dir?
-            debug('Is invalid allowed?: {}'.format(s))
-            if s in ignore_dirs:
-                debug('Invalid is okay: {}'.format(s))
-                continue
-            msg = 'Invalid {} directory: {}'.format(
-                name,
-                dirpath if dirpath else '<not set>',
-            )
-            print_err(msg)
-            self.show_error(msg)
-            return False
-        return True
 
 
 def load_gui(**kwargs):
