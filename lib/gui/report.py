@@ -230,7 +230,9 @@ class WinReport(tk.Toplevel):
         config_save(self.config_gui)
         # Remove topmost, and hide this report, in case any callbacks want
         # to show a dialog.
-        debug('Closing report window (geometry={!r}).'.format(self.geometry()))
+        debug('Closing report window (geometry={!r}).'.format(
+            self.config_gui['geometry_report'],
+        ))
         self.attributes('-topmost', 0)
         self.withdraw()
         self.update()

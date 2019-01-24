@@ -47,8 +47,6 @@ class WinUnarchive(tk.Toplevel):
         self.title('{} - Unarchive'.format(NAME))
         self.geometry(self.config_gui.get('geometry_unarchive', '731x163'))
 
-        self.style = ttk.Style()
-        print(self.style.theme_use())
         # Hotkey info.
         hotkeys = {
             'unarchive': {
@@ -79,9 +77,9 @@ class WinUnarchive(tk.Toplevel):
             padding='2 2 2 2',
         )
         self.frm_top.pack(
-            fill=tk.X,
+            fill=tk.BOTH,
             side=tk.TOP,
-            expand=False,
+            expand=True,
         )
         # # Build files frame
         self.frm_files = ttk.Frame(
@@ -89,16 +87,16 @@ class WinUnarchive(tk.Toplevel):
             padding='2 2 2 2',
         )
         self.frm_files.pack(
-            fill=tk.X,
+            fill=tk.BOTH,
             side=tk.LEFT,
             expand=True,
         )
         self.tree_files = ttk.Treeview(
             self.frm_files,
-            selectmode='browse',
+            selectmode='extended',
             height=3,
         )
-        self.tree_files.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.tree_files.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree_files.configure(columns=('file', ), show='headings')
         self.tree_files.heading(
             'file',
@@ -118,7 +116,7 @@ class WinUnarchive(tk.Toplevel):
         # Main commands frame.
         self.frm_cmds = ttk.Frame(
             self.frm_main,
-            padding='2 20 2 2',
+            padding='2 4 2 2',
         )
         self.frm_cmds.pack(
             fill=tk.X,
@@ -280,7 +278,7 @@ class WinUnarchive(tk.Toplevel):
         self.config_gui['geometry_unarchive'] = self.geometry()
         config_save(self.config_gui)
         debug('Closing unarchive window (geometry={!r}).'.format(
-            self.geometry()
+            self.config_gui['geometry_unarchive']
         ))
         self.withdraw()
         super().destroy()

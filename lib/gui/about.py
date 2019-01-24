@@ -90,7 +90,7 @@ class WinAbout(tk.Toplevel):
 
         # Initialize this window.
         self.title('{} - About'.format(NAME))
-        self.geometry(self.config_gui.get('geometry_about', '442x240'))
+        self.geometry(self.config_gui.get('geometry_about', '442x246'))
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Make the main frame expand.
@@ -254,7 +254,9 @@ class WinAbout(tk.Toplevel):
         debug('Saving gui-about config...')
         self.config_gui['geometry_about'] = self.geometry()
         config_save(self.config_gui)
-        debug('Closing about window (geometry={!r}).'.format(self.geometry()))
+        debug('Closing about window (geometry={!r}).'.format(
+            self.config_gui['geometry_about']
+        ))
         self.attributes('-topmost', 0)
         self.withdraw()
         super().destroy()

@@ -654,6 +654,10 @@ class WinMain(tk.Tk):
         self.config_gui['geometry'] = self.geometry()
         self.config_gui['theme'] = self.theme
         self.config_gui['auto_exit'] = self.var_auto_exit.get()
+        # Report, Unarchive, and About have saved their geometry already.
+        self.config_gui.pop('geometry_report')
+        self.config_gui.pop('geometry_about')
+        self.config_gui.pop('geometry_unarchive')
         config_save(self.config_gui)
         debug('Saving runtime info...')
 

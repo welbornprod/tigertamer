@@ -78,7 +78,23 @@ def config_increment(**kwargs):
     return config_save()
 
 
+def config_load():
+    """ Reload config from disk. """
+    try:
+        c = JSONSettings.from_file(CONFIGFILE)
+        debug('Config reloaded from: {}'.format(CONFIGFILE))
+    except FileNotFoundError:
+        c = JSONSettings()
+        c.filename = CONFIGFILE
+        debug('No config to reload: {}'.format(CONFIGFILE))
+    return c
+
+
 def config_save(d=None):
+    global config
+    # Reload config from disk, because other threads may have changed it.
+    config = config_load()
+
     if d:
         config.update(d)
     # debug_obj(dict(config.items()), msg='Saving config:')
