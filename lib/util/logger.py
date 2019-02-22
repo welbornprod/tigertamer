@@ -11,7 +11,7 @@ import os
 import sys
 import traceback
 from contextlib import suppress
-from platform import platform
+import platform
 
 from colr import (
     auto_disable as colr_auto_disable,
@@ -20,7 +20,7 @@ from colr import (
 
 from printdebug import get_lineinfo
 
-if 'linux' in platform().lower():
+if 'linux' in platform.system().lower():
     from printdebug import DebugColrPrinter as DebugPrinter
 else:
     from printdebug import DebugPrinter

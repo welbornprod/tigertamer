@@ -14,11 +14,10 @@ from easysettings import JSONSettings
 from .logger import (
     debug,
     debug_err,
-    debug_obj,
 )
 
 NAME = 'Tiger Tamer'
-VERSION = '0.1.0'
+VERSION = '0.1.1'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
 SCRIPTDIR = os.path.abspath(sys.path[0])

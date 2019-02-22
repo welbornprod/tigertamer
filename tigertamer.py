@@ -53,8 +53,8 @@ USAGESTR = """{versionstr}
         {script} -g [-D] -f func
         {script} -g [-r] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
-        {script} [FILE...] [-i dir...] [-n] [-D]
-        {script} [FILE...] [-i dir...] [-o dir [-a dir]] [-D]
+        {script} [FILE...] [-i dir...] [-n] [-s] [-D]
+        {script} [FILE...] [-i dir...] [-o dir [-a dir]] [-s] [-D]
 
     Options:
         ARCHIVE_DIR           : Directory to look for archive files.
@@ -74,6 +74,7 @@ USAGESTR = """{versionstr}
         -h,--help             : Show this help message.
         -n,--namesonly        : Just show which files would be generated.
         -r,--run              : Automatically run with settings in config.
+        -s,--nosplit          : Do not split parts into single line items.
         -u,--unarchive        : Undo any archiving, if possible.
         -U,--UNARCHIVE        : Undo any archiving, and remove all output
                                 files.
@@ -138,6 +139,7 @@ def main(argd):
     mozfiles = load_moz_files(
         inpaths,
         ignore_dirs=ignore_dirs,
+        split_parts=not argd['--nosplit'],
     )
 
     parentfiles = set()

@@ -204,16 +204,16 @@ def is_valid_dat_file(filename, _indent=''):
     return True
 
 
-def load_moz_file(filename):
+def load_moz_file(filename, split_parts=True):
     """ Loads a single MozaikMasterFile, and splits it into multiple Mozaik
         width files.
     """
-    master = MozaikMasterFile.from_file(filename)
+    master = MozaikMasterFile.from_file(filename, split_parts=split_parts)
     debug('Creating width files from: {}'.format(master))
     return master.into_width_files()
 
 
-def load_moz_files(filepaths, ignore_dirs=None, ext='.dat'):
+def load_moz_files(filepaths, ignore_dirs=None, ext='.dat', split_parts=True):
     """ Loads multiple MozaikFiles from file names, and returns a list of
         MozaikFiles.
     """
@@ -234,13 +234,16 @@ def load_moz_files(filepaths, ignore_dirs=None, ext='.dat'):
                         filepath,
                         ignore_dirs=ignore_dirs,
                         ext=ext,
-                    )
+                    ),
+                    ignore_dirs=ignore_dirs,
+                    ext=ext,
+                    split_parts=split_parts,
                 )
             )
 
         elif filepath.endswith(ext):
             # A mozaik face-frame.dat file.
-            files.extend(load_moz_file(filepath))
+            files.extend(load_moz_file(filepath, split_parts=split_parts))
         else:
             raise ValueError(
                 'Invalid extension for Mozaik CSV file: {}'.format(
@@ -394,14 +397,14 @@ class MozaikMasterFile(object):
         )
 
     @classmethod
-    def from_file(cls, filename):
+    def from_file(cls, filename, split_parts=True):
         """ Creates a MozaikFile, and loads/parses a file to populate it.
         """
         mp = cls()
-        mp.parse(filename)
+        mp.parse(filename, split_parts=split_parts)
         return mp
 
-    def parse(self, filename):
+    def parse(self, filename, split_parts=True):
         """ Parses a Mozaik CSV (.dat) file, and populates the MozaikFile
             class.
         """
@@ -415,7 +418,11 @@ class MozaikMasterFile(object):
                 }
                 partinfo['count'] = int(partinfo['count'])
                 self.count += partinfo['count']
-                self.parts.extend(MozaikMasterPart(partinfo).split_parts())
+                part = MozaikMasterPart(partinfo)
+                if split_parts:
+                    self.parts.extend(part.split_parts())
+                else:
+                    self.parts.append(part)
         return self
 
     def into_width_files(self):
@@ -718,7 +725,13 @@ class MozaikMasterPart(object):
         # Split cabs.
         cabparts = []
         for roompart in roomparts:
-            roomno, sep, cabs = roompart.no.partition(':')
+            if ':' in roompart.no:
+                roomno, sep, cabs = roompart.no.partition(':')
+            else:
+                # Single room jobs, no room number. Force Room #1.
+                debug('No room number: {}'.format(roompart), align=True)
+                roomno = 'R1'
+                cabs = roompart.no.strip()
             cabnos = cabs.split('&')
             if len(cabnos) == 1:
                 roompart.count = self.get_cab_count(roompart.no)
