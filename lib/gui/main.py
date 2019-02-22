@@ -27,7 +27,6 @@ from ..util.parser import (
     get_archive_info,
     get_tiger_files,
     load_moz_files,
-    unarchive_file,
     write_tiger_file,
 )
 
@@ -225,25 +224,61 @@ class WinMain(tk.Tk):
             expand=True,
             padx=1,
         )
+        # Build left row of options.
+        self.frm_opts_left = ttk.Frame(
+            self.frm_opts,
+        )
+        self.frm_opts_left.pack(
+            fill=tk.BOTH,
+            side=tk.LEFT,
+            expand=True,
+            padx=0,
+        )
         # Auto exit?
         self.var_auto_exit = tk.BooleanVar()
         self.var_auto_exit.set(self.config_gui.get('auto_exit', False))
         self.chk_auto_exit = ttk.Checkbutton(
-            self.frm_opts,
+            self.frm_opts_left,
             text='Exit after report',
             onvalue=True,
             offvalue=False,
             variable=self.var_auto_exit,
         )
         self.chk_auto_exit.pack(
-            side=tk.RIGHT,
+            side=tk.TOP,
+            anchor=tk.W,
             expand=False,
+        )
+        # Extra data?
+        self.var_extra_data = tk.BooleanVar()
+        self.var_extra_data.set(self.config_gui.get('extra_data', False))
+        self.chk_extra_data = ttk.Checkbutton(
+            self.frm_opts_left,
+            text='Use extra data',
+            onvalue=True,
+            offvalue=False,
+            variable=self.var_extra_data,
+        )
+        self.chk_extra_data.pack(
+            side=tk.BOTTOM,
+            anchor=tk.W,
+            expand=False,
+        )
+        # Build right row of options.
+        self.frm_opts_right = ttk.Frame(
+            self.frm_opts,
+        )
+        self.frm_opts_right.pack(
+            fill=tk.BOTH,
+            expand=True,
+            side=tk.RIGHT,
+            padx=0,
         )
         # Debug mode?
         self.var_debug = tk.BooleanVar()
         self.var_debug.set(get_debug_mode())
         self.chk_debug = ttk.Checkbutton(
-            self.frm_opts,
+            self.frm_opts_right,
             text='Debug mode',
             onvalue=True,
             offvalue=False,
@@ -251,7 +286,23 @@ class WinMain(tk.Tk):
             command=self.cmd_chk_debug,
         )
         self.chk_debug.pack(
-            side=tk.RIGHT,
+            side=tk.TOP,
+            anchor=tk.W,
+            expand=False,
+        )
+        # Split parts?
+        self.var_no_part_split = tk.BooleanVar()
+        self.var_no_part_split.set(self.config_gui.get('no_part_split', True))
+        self.chk_no_part_split = ttk.Checkbutton(
+            self.frm_opts_right,
+            text='Don\'t split parts',
+            onvalue=True,
+            offvalue=False,
+            variable=self.var_no_part_split,
+        )
+        self.chk_no_part_split.pack(
+            side=tk.BOTTOM,
+            anchor=tk.W,
             expand=False,
         )
         # Build Run/Exit buttons frame
@@ -441,6 +492,7 @@ class WinMain(tk.Tk):
             mozfiles = load_moz_files(
                 filepaths=mozdir,
                 ignore_dirs=self.config_gui['ignore_dirs'],
+                split_parts=not self.var_no_part_split.get(),
             )
         except OSError as ex:
             show_error('Cannot load .dat files in: {}\n{}'.format(
@@ -477,6 +529,7 @@ class WinMain(tk.Tk):
                     mozfile,
                     self.entry_tiger.get(),
                     archive_dir=self.entry_arch.get() or '',
+                    extra_data=self.var_extra_data.get(),
                     error_cb=add_error_file,
                     success_cb=add_success_file,
                     )
@@ -654,13 +707,13 @@ class WinMain(tk.Tk):
         self.config_gui['geometry'] = self.geometry()
         self.config_gui['theme'] = self.theme
         self.config_gui['auto_exit'] = self.var_auto_exit.get()
+        self.config_gui['extra_data'] = self.var_extra_data.get()
+        self.config_gui['no_part_split'] = self.var_no_part_split.get()
         # Report, Unarchive, and About have saved their geometry already.
         self.config_gui.pop('geometry_report')
         self.config_gui.pop('geometry_about')
         self.config_gui.pop('geometry_unarchive')
         config_save(self.config_gui)
-        debug('Saving runtime info...')
-
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
 
@@ -674,6 +727,8 @@ class WinMain(tk.Tk):
             self.btn_exit,
             self.chk_auto_exit,
             self.chk_debug,
+            self.chk_extra_data,
+            self.chk_no_part_split,
             self.entry_dat,
             self.btn_dat,
             self.entry_tiger,

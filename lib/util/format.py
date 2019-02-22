@@ -69,14 +69,14 @@ settings = {
 }
 
 
-def create_xml(mozfile):
+def create_xml(mozfile, extra_data=False):
     return '\n'.join((
         '<?xml version="1.0" encoding="utf-8"?>',
         et_tostring(
             E.CutList(
-                *create_settings(mozfile.filename),
+                *create_settings(mozfile.filename, extra_data=extra_data),
                 E.pieces(
-                    *create_pieces(mozfile.parts),
+                    *create_pieces(mozfile.parts, extra_data=extra_data),
                 ),
             ),
             pretty_print=True,
@@ -84,30 +84,49 @@ def create_xml(mozfile):
     ))
 
 
-def create_piece(mozpart, index):
+def create_piece(mozpart, index, extra_data=False):
+    part_strs = [
+        E.string(str(index)),
+        E.string(mozpart.type),
+        E.string(mozpart.no),
+    ]
+    if extra_data:
+        part_strs.append(E.string(mozpart.extra_data))
+
     return E.Piece(
-        E.labelStrings(
-            E.string(str(index)),
-            E.string(mozpart.type),
-            E.string(mozpart.no),
-        ),
+        E.labelStrings(*part_strs),
         E.length(mozpart.length),
         E.quantity(str(mozpart.count)),
         E.completed('0'),
     )
 
 
-def create_pieces(mozparts):
+def create_pieces(mozparts, extra_data=False):
     return (
-        create_piece(part, i + 1)
+        create_piece(part, i + 1, extra_data=extra_data)
         for i, part in enumerate(
             sorted(mozparts, key=lambda p: p.no)
         )
     )
 
 
-def create_settings(filename):
+def create_settings(filename, extra_data=False):
     tigername, _ = os.path.splitext(filename)
+    labels = ['Index', 'Part', 'No']
+    if extra_data:
+        labels.append('Note')
+    # Generate LabelField items programmatically.
+    label_strs = [
+        E.LabelField(
+            E.header(header),
+            E.fontSize('12'),
+            E.x('0'),
+            E.y(str(col * 20)),
+            E.column(str(col)),
+        )
+        for col, header in enumerate(labels)
+    ]
+
     return (
         E.style(settings['style']),
         E.unit(settings['unit']),
@@ -126,27 +145,5 @@ def create_settings(filename):
         E.quantityMultiples(settings['quantityMultiples']),
         E.isInfinite(settings['isInfinite']),
         E.isCascade(settings['isCascade']),
-        E.printStrings(
-            E.LabelField(
-                E.header('Index'),
-                E.fontSize('12'),
-                E.x('0'),
-                E.y('0'),
-                E.column('0'),
-            ),
-            E.LabelField(
-                E.header('Part'),
-                E.fontSize('12'),
-                E.x('0'),
-                E.y('20'),
-                E.column('3'),
-            ),
-            E.LabelField(
-                E.header('No'),
-                E.fontSize('12'),
-                E.x('0'),
-                E.y('40'),
-                E.column('4'),
-            ),
-        ),
+        E.printStrings(*label_strs),
     )

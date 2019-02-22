@@ -5,7 +5,6 @@
     -Christopher Welborn 01-05-2019
 """
 
-import sys
 from platform import platform
 
 from .common import (
@@ -15,6 +14,7 @@ from .common import (
 )
 
 from ..util.config import (
+    AUTHOR,
     ICONFILE,
     NAME,
     VERSION,
@@ -101,7 +101,6 @@ class WinAbout(tk.Toplevel):
         self.frm_main.grid(row=0, column=0, sticky=tk.NSEW)
         for x in range(1):
             self.frm_main.columnconfigure(x, weight=1)
-            self.frm_main.rowconfigure(x, weight=1)
         # .Info wrapper.
         self.frm_top = ttk.Frame(
             self.frm_main,
@@ -153,7 +152,7 @@ class WinAbout(tk.Toplevel):
         self.var_author = tk.StringVar()
         self.lbl_author = ttk.Label(
             self.frm_tt,
-            text='Christopher Welborn',
+            text=AUTHOR or 'Christopher Welborn',
             font='Arial 10 italic',
             justify=tk.CENTER,
         )
@@ -162,18 +161,20 @@ class WinAbout(tk.Toplevel):
         # .Sys Info Frame
         self.frm_info = ttk.Frame(self.frm_main, padding='2 2 2 2')
         self.frm_info.grid(row=1, column=0, sticky=tk.NSEW)
-        # Make the entry grow.
-        for x in range(1):
-            self.frm_info.columnconfigure(x, weight=3)
-            self.frm_info.rowconfigure(x, weight=3)
+        self.frm_main.rowconfigure(1, weight=1)
+        self.frm_info.rowconfigure(0, weight=1)
+        self.frm_info.columnconfigure(0, weight=100)
+        self.frm_info.columnconfigure(1, weight=1)
         # ..Sys Info Scrollbar
         self.scroll_info = ttk.Scrollbar(self.frm_info)
         self.scroll_info.grid(row=0, column=1, sticky=tk.NSEW)
         # ..Sys Info Text
+        max_info_lines = 11
+        max_info_cols = len(PLATFORM) + 5
         self.text_info = tk.Text(
             self.frm_info,
-            width=len(PLATFORM) + 5,
-            height=10,
+            width=max_info_cols,
+            height=max_info_lines,
             yscrollcommand=self.scroll_info.set,
             bg='#ffffff',
             fg='#000000',
@@ -182,6 +183,7 @@ class WinAbout(tk.Toplevel):
         self.text_info.grid(row=0, column=0, sticky=tk.NSEW)
         # Insert all information into the Text widget.
         self.build_info()
+        # Make text read-only.
         self.text_info.configure(state=tk.DISABLED)
 
     def append_info(self, text):

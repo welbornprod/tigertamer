@@ -43,6 +43,9 @@ class WinUnarchive(tk.Toplevel):
             raise TypeError('Missing required kwarg: {}'.format(ex))
 
         super().__init__(*args, **kwargs)
+        # Make a topmost window, because the main window can't be used
+        # right now anyway.
+        self.attributes('-topmost', 1)
 
         self.title('{} - Unarchive'.format(NAME))
         self.geometry(self.config_gui.get('geometry_unarchive', '731x163'))
@@ -225,8 +228,12 @@ class WinUnarchive(tk.Toplevel):
             filename = iteminfo['values'][0]
             targetinfo.append((filename, self.archive_info[filename]))
 
+        self.attributes('-topmost', 0)
+        self.withdraw()
         if not self.confirm_unarchive(targetinfo):
             debug('User cancelled unarchiving.')
+            self.attributes('-topmost', 1)
+            self.deiconify()
             return False
 
         errs = []
@@ -280,6 +287,9 @@ class WinUnarchive(tk.Toplevel):
         debug('Closing unarchive window (geometry={!r}).'.format(
             self.config_gui['geometry_unarchive']
         ))
+        # Remove topmost, and hide this window, in case any callbacks want
+        # to show a dialog.
+        self.attributes('-topmost', 0)
         self.withdraw()
         super().destroy()
         debug('Calling destroy_cb({})...'.format(self.destroy_cb))

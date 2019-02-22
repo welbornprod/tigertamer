@@ -327,7 +327,7 @@ def unarchive_file(src, dest):
 
 
 def write_tiger_file(
-        mozfile, outdir, archive_dir=None,
+        mozfile, outdir, archive_dir=None, extra_data=False,
         error_cb=None, success_cb=None):
     """ Write a .tiger file from a MozaikFile.
         Without callbacks given, it returns an exit status (0 or 1).
@@ -345,7 +345,7 @@ def write_tiger_file(
         debug_err('Made new tiger file path: {}'.format(tigerpath))
     try:
         with open(tigerpath, 'w') as f:
-            f.write(create_xml(mozfile))
+            f.write(create_xml(mozfile, extra_data=extra_data))
     except EnvironmentError as ex:
         msg = 'Cannot write tiger file: {}\n{}'.format(
             tigerpath,
@@ -377,7 +377,7 @@ class MozaikMasterFile(object):
         self.parts = []
 
     def __repr__(self):
-        """ Stringify this MozaikFile for debug printing. """
+        """ Stringify this MozaikMasterFile for debug printing. """
         lines = [str(self)]
 
         if self.parts:
@@ -398,15 +398,16 @@ class MozaikMasterFile(object):
 
     @classmethod
     def from_file(cls, filename, split_parts=True):
-        """ Creates a MozaikFile, and loads/parses a file to populate it.
+        """ Creates a MozaikMasterFile, and loads/parses a file to
+            populate it.
         """
         mp = cls()
         mp.parse(filename, split_parts=split_parts)
         return mp
 
     def parse(self, filename, split_parts=True):
-        """ Parses a Mozaik CSV (.dat) file, and populates the MozaikFile
-            class.
+        """ Parses a Mozaik CSV (.dat) file, and populates the
+            MozaikMasterFile class.
         """
         debug('Parsing: {}'.format(filename))
         self.filename = filename
@@ -423,6 +424,7 @@ class MozaikMasterFile(object):
                     self.parts.extend(part.split_parts())
                 else:
                     self.parts.append(part)
+        debug('Parsed into: {}'.format(self))
         return self
 
     def into_width_files(self):
@@ -447,6 +449,19 @@ class MozaikMasterFile(object):
         for mozfile in mozfiles:
             mozfile.parent_file = self.filename
             mozfile.combine_parts()
+
+        mozfilecount = sum(mozfile.count for mozfile in mozfiles)
+        if self.count == mozfilecount:
+            debug('Part count is same: Master={}, MozFiles={}'.format(
+                self.count,
+                mozfilecount,
+            ))
+        else:
+            debug_err('Part count is off: Master={}, MozFiles={}'.format(
+                self.count,
+                mozfilecount,
+            ))
+
         return mozfiles
 
     def to_csv(self):
@@ -455,8 +470,8 @@ class MozaikMasterFile(object):
 
 
 class MozaikFile(object):
-    """ Holds a Mozaik file of a predetermined width, without extra data. """
-    header = ('count', 'length', 'type', 'no')
+    """ Holds a Mozaik file of a predetermined width. """
+    header = ('count', 'length', 'type', 'no', 'extra_data')
     count = 0
 
     def __init__(self, filename, width):
@@ -553,8 +568,7 @@ class MozaikFile(object):
             # No more dead parts to remove.
             pass
 
-        if count:
-            debug('Parts combined: {}'.format(count), align=True)
+        debug('Parts combined: {}'.format(count), align=True)
 
     def fix_filename(self, filename, width):
         """ Fix the file name to contain more information. """

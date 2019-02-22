@@ -19,6 +19,7 @@ from colr import (
 )
 
 from lib.util.config import (
+    AUTHOR,
     config,
     VERSIONSTR,
 )
@@ -44,17 +45,18 @@ SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
 SCRIPTDIR = os.path.abspath(sys.path[0])
 
 USAGESTR = """{versionstr}
+    Created by: {author}
 
     Converts Mozaik (.dat) CSV files into TigerStop (.tiger) XML files for
     use with the TigerTouch software.
 
     Usage:
         {script} -h | -v
-        {script} -g [-D] -f func
-        {script} -g [-r] [-D]
+        {script} -g [-e] [-s] [-D] -f func
+        {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
-        {script} [FILE...] [-i dir...] [-n] [-s] [-D]
-        {script} [FILE...] [-i dir...] [-o dir [-a dir]] [-s] [-D]
+        {script} [FILE...] [-e] [-i dir...] [-n] [-s] [-D]
+        {script} [FILE...] [-e] [-i dir...] [-o dir [-a dir]] [-s] [-D]
 
     Options:
         ARCHIVE_DIR           : Directory to look for archive files.
@@ -63,6 +65,7 @@ USAGESTR = """{versionstr}
                                 Use - to disable archiving.
                                 Disabled when printing to stdout.
         -D,--debug            : Show more info while running.
+        -e,--extra            : Use extra data from Mozaik files.
         -f name, --func name  : Run a function from WinMain for debugging.
         -g,--gui              : Load the Tiger Tamer GUI.
         -i dir,--ignore dir   : One or more directories to ignore when looking
@@ -79,7 +82,7 @@ USAGESTR = """{versionstr}
         -U,--UNARCHIVE        : Undo any archiving, and remove all output
                                 files.
         -v,--version          : Show version.
-""".format(script=SCRIPT, versionstr=VERSIONSTR)
+""".format(author=AUTHOR, script=SCRIPT, versionstr=VERSIONSTR)
 
 
 def main(argd):
@@ -102,11 +105,17 @@ def main(argd):
     if archdir and (archdir != '-'):
         ignore_dirs.add(archdir)
 
+    # Handle config/arg flags.
+    argd['--extra'] = config.get('extra_data', argd['--extra'])
+    argd['--nosplit'] = config.get('no_part_split', argd['--nosplit'])
+
     if argd['--gui']:
         # The GUI handles arguments differently, send it the correct config.
         return load_gui(
             auto_exit=config.get('auto_exit', False),
             auto_run=argd['--run'],
+            extra_data=argd['--extra'],
+            no_part_split=argd['--nosplit'],
             geometry=config.get('geometry', ''),
             geometry_about=config.get('geometry_about', ''),
             geometry_report=config.get('geometry_report', ''),
@@ -151,6 +160,7 @@ def main(argd):
             outdir,
             names_only=argd['--namesonly'],
             archive_dir=archdir,
+            extra_data=argd['--extra'],
             )
 
     parentlen = len(parentfiles)
@@ -173,7 +183,9 @@ def main(argd):
     return errs
 
 
-def handle_moz_file(mozfile, outdir, archive_dir=None, names_only=False):
+def handle_moz_file(
+        mozfile, outdir,
+        archive_dir=None, names_only=False, extra_data=False):
     """ Handle the processing of one MozaikFile. """
     tigerpath = os.path.join(outdir, mozfile.filename)
 
@@ -181,10 +193,15 @@ def handle_moz_file(mozfile, outdir, archive_dir=None, names_only=False):
         print(tigerpath)
         return 0
     elif outdir in (None, '-'):
-        print(create_xml(mozfile))
+        print(create_xml(mozfile, extra_data=extra_data))
         return 0
 
-    return write_tiger_file(mozfile, outdir, archive_dir=archive_dir)
+    return write_tiger_file(
+        mozfile,
+        outdir,
+        archive_dir=archive_dir,
+        extra_data=extra_data,
+    )
 
 
 def options_are_set(*args):

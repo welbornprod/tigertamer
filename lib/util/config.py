@@ -17,7 +17,8 @@ from .logger import (
 )
 
 NAME = 'Tiger Tamer'
-VERSION = '0.1.1'
+VERSION = '0.2.0'
+AUTHOR = 'Christopher Joseph Welborn'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
 SCRIPTDIR = os.path.abspath(sys.path[0])
@@ -47,16 +48,12 @@ def config_increment(**kwargs):
         Config keys/values are passed in by `kwargs`.
         A `default` key can be given, for default values.
     """
+    global config
     default = kwargs.get('default', Nothing)
     if default is not Nothing:
         kwargs.pop('default')
 
     for key, value in kwargs.items():
-        debug('Incrementing config value: {!r}={!r} ({!r})'.format(
-            key,
-            value,
-            'Nothing' if default is Nothing else default,
-        ))
         v = config.get(key, default)
         if v is Nothing:
             debug_err('Tried to increment invalid config key: {}'.format(key))
@@ -64,6 +61,15 @@ def config_increment(**kwargs):
         if value == 0:
             debug_err('Tried to increment by 0. Cancelling.')
             return False
+        debug(
+            'Incrementing: {!r}={!r} + {!r} (default: {!r})'.format(
+                key,
+                v,
+                value,
+                'Nothing' if default is Nothing else default,
+            )
+        )
+
         try:
             config[key] = v + value
         except Exception as ex:
