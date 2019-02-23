@@ -17,6 +17,7 @@ from .config import (
 from .logger import (
     debug,
     debug_err,
+    debug_obj,
     print_err,
     status,
 )
@@ -123,8 +124,7 @@ def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
     ]
     datfiles = []
     for diritem in diritems:
-        if ignore_dirs and (diritem in ignore_dirs):
-            debug('Ignoring directory: {}'.format(diritem))
+        if is_ignored_dir(diritem, ignore_dirs=ignore_dirs):
             continue
         if diritem.endswith(ext):
             if is_valid_dat_file(diritem, _indent=indent):
@@ -132,7 +132,12 @@ def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
                 datfiles.append(diritem)
         elif os.path.isdir(diritem):
             datfiles.extend(
-                get_dir_files(diritem, ext=ext, _level=_level + 1)
+                get_dir_files(
+                    diritem,
+                    ignore_dirs=ignore_dirs,
+                    ext=ext,
+                    _level=_level + 1,
+                )
             )
     filelen = len(datfiles)
     debug('Found {} {}.'.format(
@@ -182,6 +187,20 @@ def increment_file_path(path):
     return newpath
 
 
+def is_ignored_dir(dirpath, ignore_dirs=None):
+    """ Return True if this `dirpath` should be ignored. """
+    if not ignore_dirs:
+        return False
+    if dirpath.rstrip('/') in ignore_dirs:
+        debug('Ignoring matched dir: {}'.format(dirpath))
+        return True
+    for ignorepath in ignore_dirs:
+        if dirpath.startswith(ignorepath):
+            debug('Ignoring partial-match dir: {}'.format(dirpath))
+            return True
+    return False
+
+
 def is_valid_dat_file(filename, _indent=''):
     """ Returns True if this file has the proper column count for a .dat
         file.
@@ -223,8 +242,7 @@ def load_moz_files(filepaths, ignore_dirs=None, ext='.dat', split_parts=True):
     files = []
     for filepath in filepaths:
         if os.path.isdir(filepath):
-            if ignore_dirs and (filepath in ignore_dirs):
-                debug('Ignoring directory: {}'.format(filepath))
+            if is_ignored_dir(filepath, ignore_dirs=ignore_dirs):
                 continue
             # A directory, possibly containing .dat files
             # or sub-dirs with .dat files.
@@ -426,6 +444,31 @@ class MozaikMasterFile(object):
                     self.parts.append(part)
         debug('Parsed into: {}'.format(self))
         return self
+
+    def parse_line(self, line, split_parts=True):
+        """ Parse a single line from a Mozaik .dat file into a
+            MozaikMasterPart.
+        """
+        cols = line.split(',')
+        collen = len(cols)
+        if collen != len(self.header):
+            raise ValueError('Invalid number of columns: ({}) {!r}'.format(
+                collen,
+                cols,
+            ))
+        partinfo = {
+            self.header[i]: value
+            for i, value in enumerate(cols)
+        }
+        partinfo['count'] = int(partinfo['count'])
+
+        part = MozaikMasterPart(partinfo)
+        parts = []
+        if split_parts:
+            parts.extend(part.split_parts())
+        else:
+            parts.append(part)
+        return parts
 
     def into_width_files(self):
         """ Split this MozaikMasterFile into seperate MozaikFiles, each
@@ -642,6 +685,16 @@ class MozaikMasterPart(object):
                 type(data).__name__,
             ))
 
+        # Fix cab no? This may be deleted in the future.
+        cabno = getattr(self, 'no', None)
+        if not cabno:
+            if cabno is None:
+                debug_err('No cab number at all:')
+            else:
+                debug_err('Empty cab number:')
+            debug_err(self, align=True)
+            self.no = ''
+
     def __bool__(self):
         return any(getattr(self, k, None) for k in self.header)
 
@@ -670,6 +723,41 @@ class MozaikMasterPart(object):
         }
         return self.__class__(data)
 
+    @staticmethod
+    def get_cab_count(cabno):
+        """ Parse out multiple cab counts from a `no` string (like: R1:1(2)).
+            Returns the number inside the parenthesis or 1.
+        """
+        countmatch = cab_count_pat.match(cabno)
+        if (countmatch is not None) and countmatch.groups():
+            cabcount = int(countmatch.groups()[0])
+            debug(
+                'Found multi count: {}'.format(cabcount),
+                align=True,
+            )
+            return cabcount
+        if '(' in cabno:
+            debug_err('Missed cab count?: {!r}'.format(cabno))
+        return 1
+
+    def has_multi(self):
+        """ Return True if this MozaikPart has multiple cabs or rooms in
+            the cab no.
+        """
+        if not self.no:
+            return False
+        return self.has_multi_cab() or self.has_multi_room()
+
+    def has_multi_cab(self):
+        """ Return True if this MozaikPart has multiple cabs in the cab no.
+        """
+        return '&' in self.no
+
+    def has_multi_room(self):
+        """ Return True if this MozaikPart has multiple rooms in the cab no.
+        """
+        return (self.no.lower().count('r') > 1) and (' ' in self.no)
+
     def similar_part(self, other):
         """ Returns True if `other` is the same exact part as this,
             except for the count.
@@ -693,70 +781,51 @@ class MozaikMasterPart(object):
         debug(str(other), align=True)
         return True
 
-    @staticmethod
-    def get_cab_count(cabno):
-        """ Parse out multiple cab counts from a `no` string (like: (2)).
-            Returns the number inside the parenthesis or 1.
-        """
-        countmatch = cab_count_pat.match(cabno)
-        if (countmatch is not None) and countmatch.groups():
-            cabcount = int(countmatch.groups()[0])
-            debug(
-                'Found multi count: {}'.format(cabcount),
-                align=True,
-            )
-            return cabcount
-        return 1
-
     def split_parts(self):
         """ If this MozaikPart has multiple rooms/cabs, split it into
-            multiple MozaikParts. Otherwise returns a list with [self].
+            multiple MozaikParts.
+            Otherwise returns a list with [self].
         """
-        cabno = getattr(self, 'no', None)
-        if not cabno:
-            return [self]
-        has_multiple = (' ' in cabno) or ('&' in cabno)
-        if not has_multiple:
+        if not self.has_multi():
             debug('Single part: {}'.format(self))
             return [self]
 
         # Split rooms.
-        roomparts = []
-        roomnos = cabno.split(' ')
-        if len(roomnos) == 1:
-            part = self.copy()
-            roomparts.append(part)
-            debug('Added single room part: {}'.format(part))
-        else:
-            debug('Multiple rooms: {}'.format(cabno))
-            for roomno in roomnos:
-                part = self.copy()
-                part.no = roomno
-                part.count = roomno.count('&') + 1
-                roomparts.append(part)
-                debug('Added separate room part: {}'.format(part), align=True)
-
+        roomparts = self.split_rooms()
         # Split cabs.
+        return self.split_room_cabs(roomparts)
+
+    def split_room_cabs(self, roomparts):
+        """ Split each single-room part, with possibly multiple parts on one
+            line, into separate parts for each cabinet number.
+            Returns a list of parts, possible just [self] for single room and
+            single cab parts.
+
+            Raises ValueError if a multi-room part is encountered.
+            Arguments:
+                roomparts  : A list of MozaikParts with only a single-room
+                             number for each part.
+        """
         cabparts = []
+        multiroom = []
         for roompart in roomparts:
-            if ':' in roompart.no:
-                roomno, sep, cabs = roompart.no.partition(':')
-            else:
-                # Single room jobs, no room number. Force Room #1.
-                debug('No room number: {}'.format(roompart), align=True)
-                roomno = 'R1'
-                cabs = roompart.no.strip()
+            if roompart.has_multi_room():
+                multiroom.append(roompart)
+                debug_err('Got multi-room part: {}'.format(roompart))
+                continue
+            if ':' not in roompart.no:
+                debug_err('No room number: {}'.format(roompart))
+                roompart.no = 'R1:{}'.format(roompart.no)
+            roomno, sep, cabs = roompart.no.partition(':')
+
             cabnos = cabs.split('&')
             if len(cabnos) == 1:
                 roompart.count = self.get_cab_count(roompart.no)
                 cabparts.append(roompart)
-                debug(
-                    'Added single cab part: {}'.format(roompart),
-                    align=True,
-                )
+                debug('Added single cab part: {}'.format(roompart))
                 continue
             # Parse multiple cab nos.
-            debug('Multiple cabs: {}'.format(cabs), align=True)
+            debug('Multiple cabs: {}'.format(cabs))
             for cab in cabs.split('&'):
                 part = roompart.copy()
                 part.no = ':'.join((roomno, cab))
@@ -766,7 +835,49 @@ class MozaikMasterPart(object):
                     'Added separate cab part: {}'.format(part),
                     align=True,
                 )
+        if multiroom:
+            debug_err('Handling mistaken multi-room parts:')
+            deferredroomparts = []
+            for part in multiroom:
+                deferredroomparts.extend(part.split_rooms())
+            deferredcabparts = self.split_room_cabs(deferredroomparts)
+            debug_err('Re-split cabs ({}) for {} multi-room parts.'.format(
+                len(deferredcabparts),
+                len(deferredroomparts),
+            ))
+            cabparts.extend(deferredcabparts)
         return cabparts
+
+    def split_rooms(self):
+        """ Split this part, with possibly multiple rooms, into separate
+            parts for each room number.
+            See also: self.split_parts and self.split_room_cabs
+            Returns a list of parts, possibly just [self] for single rooms.
+        """
+        if not self.has_multi_room():
+            return [self]
+
+        originalcnt = self.count
+        roomparts = []
+        roomnos = self.no.split(' ')
+        if len(roomnos) == 1:
+            part = self.copy()
+            roomparts.append(part)
+            debug('Added single room part: {}'.format(part))
+        else:
+            debug('Multiple rooms: {}'.format(self.no))
+            for roomno in roomnos:
+                part = self.copy()
+                part.no = roomno
+                part.count = roomno.count('&') + self.get_cab_count(roomno)
+                roomparts.append(part)
+                debug('Added separate room part: {}'.format(part), align=True)
+            roomsplitcnt = sum(p.count for p in roomparts)
+            if roomsplitcnt != originalcnt:
+                debug_err('Splitting rooms changed count:', align=True)
+                debug_err('Original: {}'.format(originalcnt), align=True)
+                debug_err('   Split: {}'.format(roomsplitcnt), align=True)
+        return roomparts
 
     def to_csv(self):
         """ Convert back into a csv line. """

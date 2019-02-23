@@ -34,7 +34,7 @@ SCRIPTDIR = os.path.abspath(sys.path[0])
 LOGFILE = os.path.join(SCRIPTDIR, 'tigertamer.log')
 DEBUG = False
 debugprinter = DebugPrinter()
-if not getattr(debugprinter, 'debug_err'):
+if not getattr(debugprinter, 'debug_err', None):
     # Fixing old version of printdebug.
     def polyfill_debug_err(*args, **kwargs):
         kwargs['level'] = kwargs.get('level', 0) + 1

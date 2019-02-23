@@ -17,7 +17,7 @@ from .logger import (
 )
 
 NAME = 'Tiger Tamer'
-VERSION = '0.2.0'
+VERSION = '0.2.1'
 AUTHOR = 'Christopher Joseph Welborn'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]

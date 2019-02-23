@@ -99,7 +99,8 @@ def main(argd):
         config.get('archive_dir', './tigertamer_archive') or
         argd['ARCHIVE_DIR']  # Only valid with -u or -U.
     )
-    ignore_dirs = set(argd['--ignore'])
+    ignore_dirs = set(config.get('ignore_dirs', []))
+    ignore_dirs.update(set(argd['--ignore']))
     if outdir and (outdir != '-'):
         ignore_dirs.add(outdir)
     if archdir and (archdir != '-'):
