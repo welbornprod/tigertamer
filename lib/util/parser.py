@@ -469,6 +469,12 @@ class MozaikMasterFile(object):
         if split_parts:
             parts.extend(part.split_parts())
         else:
+            realcnt = (
+                part.no.count(' ') +
+                part.no.count('&') +
+                part.get_cab_count(part.no)
+            )
+            part.count = realcnt
             parts.append(part)
         return parts
 
