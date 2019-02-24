@@ -390,9 +390,10 @@ class MozaikMasterFile(object):
     header = ('count', 'width', 'length', 'type', 'no', 'extra_data')
     count = 0
 
-    def __init__(self):
-        self.filename = None
-        self.parts = []
+    def __init__(self, filename=None, parts=None):
+        self.filename = filename or None
+        self.parts = parts or []
+        self.count = sum(p.count for p in self.parts)
 
     def __repr__(self):
         """ Stringify this MozaikMasterFile for debug printing. """
@@ -423,6 +424,14 @@ class MozaikMasterFile(object):
         mp.parse(filename, split_parts=split_parts)
         return mp
 
+    @classmethod
+    def from_line(cls, line, filename=None, split_parts=True):
+        """ Parse a single line from a Mozaik .dat file into a
+            MozaikMasterFile with optional filename.
+        """
+        parts = cls.parse_row(line.split(','), split_parts=split_parts)
+        return cls(filename=filename, parts=parts)
+
     def parse(self, filename, split_parts=True):
         """ Parses a Mozaik CSV (.dat) file, and populates the
             MozaikMasterFile class.
@@ -431,39 +440,32 @@ class MozaikMasterFile(object):
         self.filename = filename
         with open(filename) as f:
             for row in csv.reader(f):
-                partinfo = {
-                    self.header[i]: value
-                    for i, value in enumerate(row)
-                }
-                partinfo['count'] = int(partinfo['count'])
-                self.count += partinfo['count']
-                part = MozaikMasterPart(partinfo)
-                if split_parts:
-                    self.parts.extend(part.split_parts())
-                else:
-                    self.parts.append(part)
+                parts = self.parse_row(row, split_parts=split_parts)
+                self.count += sum(p.count for p in parts)
+                self.parts.extend(parts)
         debug('Parsed into: {}'.format(self))
         return self
 
-    def parse_line(self, line, split_parts=True):
-        """ Parse a single line from a Mozaik .dat file into a
-            MozaikMasterPart.
+    @classmethod
+    def parse_row(cls, row, split_parts=True):
+        """ Parse a list/row of part info into a list of parts.
+            The list can come from csv.reader() or s.split(','), as long
+            as len(row) == len(self.header).
+            Returns [MozaikMasterPart(), ..]
         """
-        cols = line.split(',')
-        collen = len(cols)
-        if collen != len(self.header):
+        rowlen = len(row)
+        if len(row) != len(cls.header):
             raise ValueError('Invalid number of columns: ({}) {!r}'.format(
-                collen,
-                cols,
+                rowlen,
+                row,
             ))
         partinfo = {
-            self.header[i]: value
-            for i, value in enumerate(cols)
+            cls.header[i]: value
+            for i, value in enumerate(row)
         }
         partinfo['count'] = int(partinfo['count'])
-
-        part = MozaikMasterPart(partinfo)
         parts = []
+        part = MozaikMasterPart(partinfo)
         if split_parts:
             parts.extend(part.split_parts())
         else:
@@ -704,8 +706,12 @@ class MozaikMasterPart(object):
     def __hash__(self):
         return hash(str(self))
 
+    def __repr__(self):
+        """ String representation of this MozaikMasterPart. """
+        return str(self)
+
     def __str__(self):
-        """ Stringify this MozaikPart for debug printing. """
+        """ Stringify this MozaikMasterPart for debug printing. """
         clsname = type(self).__name__
         if not self:
             return '{}()'.format(clsname)
