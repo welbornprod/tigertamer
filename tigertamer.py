@@ -41,7 +41,7 @@ from lib.util.parser import (
 
 colr_auto_disable()
 
-SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
+SCRIPT = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[1]
 SCRIPTDIR = os.path.abspath(sys.path[0])
 
 USAGESTR = """{versionstr}
