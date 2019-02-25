@@ -469,12 +469,6 @@ class MozaikMasterFile(object):
         if split_parts:
             parts.extend(part.split_parts())
         else:
-            realcnt = (
-                part.no.count(' ') +
-                part.no.count('&') +
-                part.get_cab_count(part.no)
-            )
-            part.count = realcnt
             parts.append(part)
         return parts
 
@@ -692,7 +686,14 @@ class MozaikMasterPart(object):
             raise TypeError('Expected dict, got: {}'.format(
                 type(data).__name__,
             ))
-
+        try:
+            self.count = int(self.count)
+        except (TypeError, ValueError):
+            raise ValueError(
+                'Expected str/int for count, got: {}'.format(
+                    type(data['count'])
+                ),
+            )
         # Fix cab no? This may be deleted in the future.
         cabno = getattr(self, 'no', None)
         if not cabno:
@@ -702,6 +703,7 @@ class MozaikMasterPart(object):
                 debug_err('Empty cab number:')
             debug_err(self, align=True)
             self.no = ''
+        self.fix_cab_count()
 
     def __bool__(self):
         return any(getattr(self, k, None) for k in self.header)
@@ -734,6 +736,37 @@ class MozaikMasterPart(object):
             for field in self.header
         }
         return self.__class__(data)
+
+    def fix_cab_count(self):
+        """ Make sure multi-room/multi-cab parts have a correct count.
+            For a single-room/single-cab part a count > 1 may be valid,
+            but for multi-room/multi-cab mozaik must be specific, by marking
+            the duplicate parts with (n).
+            If this is a multi-room/multi-cab part, self.count will be set
+            to the actual cab count including any (n) markers.
+        """
+        if not self.has_multi():
+            return None
+        # Only "fix" the cab count for multiple rooms/cabs.
+        # Having a count > 1 for a single part is a valid use case.
+        # However, with multiple rooms/cabs the count must match the
+        # rooms + cab_count (n), otherwise a user wouldn't know
+        # which part is supposed to be duplicated.
+        #   3,<width>,<length>,<type>,R1:1,<extra>      <- Valid
+        #   3,<width>,<length>,<type>,R1:1 R2:2,<extra> <- Invalid
+        # ...The second case causes confusion. Which part has a count
+        #    of two?
+        # Mozaik usually does the right thing and marks the cab num:
+        #   3,<width>,<length>,<type>,R1:1 R2:2(2),<extra>
+        # ...but it still may count the parts wrong:
+        #   2,<width>,<length>,<type>,R1:1 R2:2(2),<extra>
+        # This next bit of code fixes that when needed.
+        self.count = (
+            self.no.count(' ') +
+            self.no.count('&') +
+            self.get_cab_count(self.no)
+        )
+        return None
 
     @staticmethod
     def get_cab_count(cabno):

@@ -62,8 +62,8 @@ def part_compare_fmt(a, b, mark_keys=None):
             keyfmt = key
         lines.append(fmt.format(
             key=C(keyfmt, itemcolr).rjust(itemwidth),
-            vala=C(str(getattr(a, key, NotSet)), itemcolr).ljust(itemwidth),
-            valb=C(str(getattr(b, key, NotSet)), itemcolr).ljust(itemwidth),
+            vala=C(repr(getattr(a, key, NotSet)), itemcolr).ljust(itemwidth),
+            valb=C(repr(getattr(b, key, NotSet)), itemcolr).ljust(itemwidth),
         ))
     return '\n'.join(lines)
 
