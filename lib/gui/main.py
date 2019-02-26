@@ -45,6 +45,7 @@ from .common import (
 
 from .report import WinReport
 from .unarchive import WinUnarchive
+from .viewer import WinViewer
 
 
 class WinMain(tk.Tk):
@@ -97,7 +98,11 @@ class WinMain(tk.Tk):
         self.win_report = None
         # A singleton instance for the Unarchive window (WinUnarchive).
         self.win_unarchive = None
-        # Bind all global hot keys for this window.
+        # A singleton instance for the Tiger Viewer window (WinViewer).
+        self.win_viewer = None
+
+        # Hotkey and Menu information for this window, programmatically setup.
+        # They are first sorted by label, and then by 'order' (if available).
         hotkeys = {
             'help': {
                 'About': {
@@ -106,13 +111,21 @@ class WinMain(tk.Tk):
                 },
             },
             'admin': {
-                'Unarchive and Remove Tiger Files': {
-                    'char': 'n',
-                    'func': self.cmd_menu_unarchive_and_remove,
-                },
                 'Remove Tiger Files': {
                     'char': 'T',
                     'func': self.cmd_menu_remove_tiger_files,
+                },
+                # Tiger Viewer is the first item (order: 0)
+                'Tiger Viewer': {
+                    'char': 'V',
+                    'func': self.cmd_menu_viewer,
+                    'order': 0,
+                },
+                # Separator under tiger viewer (order: 1).
+                '-': {'order': 1},
+                'Unarchive and Remove Tiger Files': {
+                    'char': 'n',
+                    'func': self.cmd_menu_unarchive_and_remove,
                 },
                 'Unarchive': {
                     'char': 'U',
@@ -135,7 +148,11 @@ class WinMain(tk.Tk):
         self.menu_main = tk.Menu(self)
         # Build Admin menu.
         self.menu_admin = tk.Menu(self.menu_main, tearoff=0)
-        for lbl in sorted(hotkeys['admin']):
+        adminsortkey = lambda k: hotkeys['admin'][k].get('order', 99)  # noqa
+        for lbl in sorted(sorted(hotkeys['admin']), key=adminsortkey):
+            if lbl == '-':
+                self.menu_admin.add_separator()
+                continue
             admininfo = hotkeys['admin'][lbl]
             self.menu_admin.add_command(
                 label=lbl,
@@ -361,19 +378,11 @@ class WinMain(tk.Tk):
                 create_event_handler(btninfo['func']),
             )
 
-        # Auto run function?
         if self.run_function:
-            func = getattr(self, self.run_function, None)
-            if func is None:
-                raise ValueError('Invalid function name: {}}'.format(
-                    self.run_function,
-                ))
-            elif not callable(func):
-                raise ValueError('Not callable: {!r}'.format(func))
-            debug('Calling function for user: {}()'.format(self.run_function))
-            func()
-        # Auto run?
+            # Auto run function?
+            self.call_by_name(self.run_function)
         elif self.config_gui.get('auto_run', False):
+            # Auto run?
             self.cmd_btn_run()
 
     def build_dir_frame(self, name, proper_name, config_key):
@@ -453,6 +462,27 @@ class WinMain(tk.Tk):
             anchor='nw',
             padx=2,
         )
+
+    def call_by_name(self, name, *args, **kwargs):
+        """ Call a WinMain method by name only. """
+        func = getattr(self, name, None)
+        if func is None:
+            # Look for a function starting with `self.run_function`.
+            origname = name
+            name = self.find_func_by_name(name)
+            if name is None:
+                name = origname
+                func = None
+            else:
+                func = getattr(self, name, None)
+            if func is None:
+                raise ValueError('Invalid function name: {}}'.format(
+                        name,
+                    ))
+        if not callable(func):
+            raise ValueError('Not callable: {!r}'.format(func))
+        debug('Calling function for user: {}()'.format(name))
+        return func()
 
     def cmd_btn_arch(self):
         """ Handles btn_arch click. """
@@ -593,7 +623,7 @@ class WinMain(tk.Tk):
         self.enable_interface(False)
         self.win_about = WinAbout(
             self,
-            geometry_about=self.config_gui['geometry_about'],
+            config_gui={'geometry_about': self.config_gui['geometry_about']},
             destroy_cb=lambda: self.report_closed(
                 allow_auto_exit=False,
             ),
@@ -666,7 +696,6 @@ class WinMain(tk.Tk):
                 'geometry_report': self.config_gui['geometry_report'],
                 'geometry_unarchive': self.config_gui['geometry_unarchive'],
             },
-            theme=self.theme,
             destroy_cb=lambda: self.enable_interface(True),
             report_cb=report_cb,
             arch_dir=self.entry_arch.get(),
@@ -677,6 +706,23 @@ class WinMain(tk.Tk):
     def cmd_menu_unarchive_and_remove(self):
         """ Handles menu->Unarchive and Remove Tiger Files """
         return self.cmd_menu_unarchive(remove_tiger_files=True)
+
+    def cmd_menu_viewer(self):
+        """ Handles menu->Tiger Viewer click. """
+        self.enable_interface(False)
+        self.win_viewer = WinViewer(
+            self,
+            config_gui={
+                'geometry_viewer': self.config_gui['geometry_viewer'],
+            },
+            destroy_cb=lambda: self.enable_interface(True),
+        )
+        return True
+
+    @classmethod
+    def cmds(cls):
+        """ Return a list of all cmd_* function names. """
+        return [a for a in dir(cls) if a.startswith('cmd_')]
 
     def confirm_remove(self, files):
         """ Returns True if the user confirms the question. """
@@ -709,10 +755,11 @@ class WinMain(tk.Tk):
         self.config_gui['auto_exit'] = self.var_auto_exit.get()
         self.config_gui['extra_data'] = self.var_extra_data.get()
         self.config_gui['no_part_split'] = self.var_no_part_split.get()
-        # Report, Unarchive, and About have saved their geometry already.
+        # Child windows have saved their geometry already.
         self.config_gui.pop('geometry_report')
         self.config_gui.pop('geometry_about')
         self.config_gui.pop('geometry_unarchive')
+        self.config_gui.pop('geometry_viewer')
         config_save(self.config_gui)
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
@@ -752,6 +799,19 @@ class WinMain(tk.Tk):
         self.style.theme_use(self.theme)
         self.config_gui['theme'] = self.theme
 
+    def find_func_by_name(self, name):
+        """ Find a WinMain method by name, or the start/end of a name.
+            Returns the method name on success, or None if it can't be found.
+        """
+        names = [
+            a
+            for a in dir(self)
+            if a.startswith(name) or a.endswith(name)
+        ]
+        if not names:
+            return None
+        return sorted(names)[0]
+
     def report_closed(self, allow_auto_exit=False):
         """ Called when the report window is closed. """
         self.enable_interface()
@@ -775,7 +835,6 @@ class WinMain(tk.Tk):
             config_gui={
                 'geometry_report': self.config_gui['geometry_report'],
             },
-            theme=self.theme,
             parent_files=[trim_file_path(s) for s in parent_files],
             error_files=[
                 (trim_file_path(s), m) for s, m in error_files
@@ -798,6 +857,21 @@ class WinMain(tk.Tk):
             arch_dir=self.entry_arch.get(),
             ignore_dirs=ignore_dirs,
         )
+
+
+def list_funcs():
+    """ List all functions available with -f (from WinMain).
+        Returns an exit status code.
+    """
+    funcs = WinMain.cmds()
+    if not funcs:
+        print_err('No functions found! What happened?')
+        return 1
+    funclen = len(funcs)
+    plural = 'function' if funclen == 1 else 'functions'
+    print('Found {} WinMain {}:'.format(funclen, plural))
+    print('    {}'.format('\n    '.join(sorted(funcs))))
+    return 0
 
 
 def load_gui(**kwargs):

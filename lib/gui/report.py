@@ -25,7 +25,6 @@ class WinReport(tk.Toplevel):
         try:
             self.config_gui = kwargs.pop('config_gui')
             self.destroy_cb = kwargs.pop('destroy_cb')
-            self.theme = kwargs.pop('theme')
             self.title_msg = kwargs.pop('title_msg')
             # List of 'master files'
             self.parent_files = kwargs.pop('parent_files')

@@ -23,7 +23,11 @@ from lib.util.config import (
     config,
     VERSIONSTR,
 )
-from lib.gui.main import load_gui
+from lib.gui.main import (
+    list_funcs,
+    load_gui,
+)
+
 from lib.util.logger import (
     debug,
     print_err,
@@ -51,8 +55,8 @@ USAGESTR = """{versionstr}
     use with the TigerTouch software.
 
     Usage:
-        {script} -h | -v
-        {script} -g [-e] [-s] [-D] -f func
+        {script} -F | -h | -v
+        {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
         {script} [FILE...] [-e] [-i dir...] [-n] [-s] [-D]
@@ -66,7 +70,9 @@ USAGESTR = """{versionstr}
                                 Disabled when printing to stdout.
         -D,--debug            : Show more info while running.
         -e,--extra            : Use extra data from Mozaik files.
+        -F,--functions        : List all available functions for -f and exit.
         -f name, --func name  : Run a function from WinMain for debugging.
+                                This automatically implies -g,--gui.
         -g,--gui              : Load the Tiger Tamer GUI.
         -i dir,--ignore dir   : One or more directories to ignore when looking
                                 for mozaik files.
@@ -109,8 +115,11 @@ def main(argd):
     # Handle config/arg flags.
     argd['--extra'] = config.get('extra_data', argd['--extra'])
     argd['--nosplit'] = config.get('no_part_split', argd['--nosplit'])
+    if argd['--functions']:
+        # List functions available for -f.
+        return list_funcs()
 
-    if argd['--gui']:
+    if argd['--gui'] or argd['--func']:
         # The GUI handles arguments differently, send it the correct config.
         return load_gui(
             auto_exit=config.get('auto_exit', False),
@@ -121,6 +130,7 @@ def main(argd):
             geometry_about=config.get('geometry_about', ''),
             geometry_report=config.get('geometry_report', ''),
             geometry_unarchive=config.get('geometry_unarchive', ''),
+            geometry_viewer=config.get('geometry_viewer', ''),
             theme=config.get('theme', ''),
             archive_dir='' if archdir in (None, '-') else archdir,
             dat_dir=inpaths[0] if inpaths else '',

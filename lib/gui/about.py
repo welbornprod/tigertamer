@@ -77,15 +77,12 @@ def humantime_fromsecs(secs, float_fmt='0.2f'):
 
 class WinAbout(tk.Toplevel):
     def __init__(self, *args, **kwargs):
-        self.config_gui = {k: v for k, v in kwargs.items()}
+        # Don't send kwargs to Toplevel().
         try:
+            self.config_gui = kwargs.pop('config_gui')
             self.destroy_cb = kwargs.pop('destroy_cb')
-            self.config_gui.pop('destroy_cb')
         except KeyError as ex:
             raise TypeError('Missing required kwarg: {}'.format(ex))
-        # Don't send kwargs to Tk().
-        for k in self.config_gui:
-            kwargs.pop(k)
         super().__init__(*args, **kwargs)
 
         # Initialize this window.

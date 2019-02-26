@@ -38,7 +38,6 @@ class WinUnarchive(tk.Toplevel):
             self.report_cb = kwargs.pop('report_cb')
             self.arch_dir = kwargs.pop('arch_dir')
             self.dat_dir = kwargs.pop('dat_dir')
-            self.theme = kwargs.pop('theme')
         except KeyError as ex:
             raise TypeError('Missing required kwarg: {}'.format(ex))
 
