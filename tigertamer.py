@@ -190,7 +190,7 @@ def main(argd):
         )
     )
     for pfile in sorted(parentfiles):
-        debug(pfile, align=True)
+        debug('Parent file: {}'.format(pfile))
     return errs
 
 
