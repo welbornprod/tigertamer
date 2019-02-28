@@ -59,8 +59,10 @@ USAGESTR = """{versionstr}
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
-        {script} [FILE...] [-e] [-i dir...] [-n] [-s] [-D]
-        {script} [FILE...] [-e] [-i dir...] [-o dir [-a dir]] [-s] [-D]
+        {script} [FILE...] [-e] [-i dir...] [-I text...]
+                 [-n] [-s] [-D]
+        {script} [FILE...] [-e] [-i dir...] [-I text...]
+                 [-o dir [-a dir]] [-s] [-D]
 
     Options:
         ARCHIVE_DIR           : Directory to look for archive files.
@@ -74,6 +76,8 @@ USAGESTR = """{versionstr}
         -f name, --func name  : Run a function from WinMain for debugging.
                                 This automatically implies -g,--gui.
         -g,--gui              : Load the Tiger Tamer GUI.
+        -I str,--IGNORE str   : One or more strings to ignore when looking
+                                for mozaik files (applies to full file path).
         -i dir,--ignore dir   : One or more directories to ignore when looking
                                 for mozaik files.
                                 The output and archive directories are
@@ -107,6 +111,9 @@ def main(argd):
     )
     ignore_dirs = set(config.get('ignore_dirs', []))
     ignore_dirs.update(set(argd['--ignore']))
+    ignore_strs = set(config.get('ignore_strs', []))
+    ignore_strs.update(set(argd['--IGNORE']))
+
     if outdir and (outdir != '-'):
         ignore_dirs.add(outdir)
     if archdir and (archdir != '-'):
@@ -136,6 +143,7 @@ def main(argd):
             dat_dir=inpaths[0] if inpaths else '',
             tiger_dir='' if outdir in (None, '-') else outdir,
             ignore_dirs=tuple(ignore_dirs),
+            ignore_strs=tuple(ignore_strs),
             run_function=argd['--func'],
         )
 
@@ -159,6 +167,7 @@ def main(argd):
     mozfiles = load_moz_files(
         inpaths,
         ignore_dirs=ignore_dirs,
+        ignore_strs=ignore_strs,
         split_parts=not argd['--nosplit'],
     )
 

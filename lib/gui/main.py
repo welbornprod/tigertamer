@@ -522,6 +522,7 @@ class WinMain(tk.Tk):
             mozfiles = load_moz_files(
                 filepaths=mozdir,
                 ignore_dirs=self.config_gui['ignore_dirs'],
+                ignore_strs=self.config_gui['ignore_strs'],
                 split_parts=not self.var_no_part_split.get(),
             )
         except OSError as ex:

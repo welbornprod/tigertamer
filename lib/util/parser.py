@@ -118,7 +118,8 @@ def get_archive_info(datdir, archdir):
     )
 
 
-def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
+def get_dir_files(
+        dirpath, ignore_dirs=None, ignore_strs=None, ext='.dat', _level=0):
     """ Loads all MozaikFiles contained in a directory. """
     indent = '  ' * _level
     debug('{}Looking for {} files in: {}'.format(
@@ -132,7 +133,12 @@ def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
     ]
     datfiles = []
     for diritem in diritems:
-        if is_ignored_dir(diritem, ignore_dirs=ignore_dirs):
+        ignore = is_ignored_dir(
+            diritem,
+            ignore_dirs=ignore_dirs,
+            ignore_strs=ignore_strs,
+        )
+        if ignore:
             continue
         if diritem.endswith(ext):
             if is_valid_dat_file(diritem, _indent=indent):
@@ -143,6 +149,7 @@ def get_dir_files(dirpath, ignore_dirs=None, ext='.dat', _level=0):
                 get_dir_files(
                     diritem,
                     ignore_dirs=ignore_dirs,
+                    ignore_strs=ignore_strs,
                     ext=ext,
                     _level=_level + 1,
                 )
@@ -195,10 +202,22 @@ def increment_file_path(path):
     return newpath
 
 
-def is_ignored_dir(dirpath, ignore_dirs=None):
+def is_ignored_dir(dirpath, ignore_dirs=None, ignore_strs=None):
     """ Return True if this `dirpath` should be ignored. """
-    if not ignore_dirs:
+    if not (ignore_dirs or ignore_strs):
         return False
+    if not ignore_dirs:
+        ignore_dirs = []
+    if ignore_strs:
+        ignore_strs = [s.lower() for s in ignore_strs]
+    else:
+        ignore_strs = []
+    dirpathlower = dirpath.lower()
+    for s in ignore_strs:
+        if s in dirpathlower:
+            debug('Ignoring matched string ({!r}): {}'.format(s, dirpath))
+            return True
+
     if dirpath.rstrip('/') in ignore_dirs:
         debug('Ignoring matched dir: {}'.format(dirpath))
         return True
@@ -240,7 +259,9 @@ def load_moz_file(filename, split_parts=True):
     return master.into_width_files()
 
 
-def load_moz_files(filepaths, ignore_dirs=None, ext='.dat', split_parts=True):
+def load_moz_files(
+        filepaths, ignore_dirs=None, ignore_strs=None,
+        ext='.dat', split_parts=True):
     """ Loads multiple MozaikFiles from file names, and returns a list of
         MozaikFiles.
     """
@@ -250,7 +271,12 @@ def load_moz_files(filepaths, ignore_dirs=None, ext='.dat', split_parts=True):
     files = []
     for filepath in filepaths:
         if os.path.isdir(filepath):
-            if is_ignored_dir(filepath, ignore_dirs=ignore_dirs):
+            ignore = is_ignored_dir(
+                filepath,
+                ignore_dirs=ignore_dirs,
+                ignore_strs=ignore_strs,
+            )
+            if ignore:
                 continue
             # A directory, possibly containing .dat files
             # or sub-dirs with .dat files.
@@ -259,9 +285,11 @@ def load_moz_files(filepaths, ignore_dirs=None, ext='.dat', split_parts=True):
                     get_dir_files(
                         filepath,
                         ignore_dirs=ignore_dirs,
+                        ignore_strs=ignore_strs,
                         ext=ext,
                     ),
                     ignore_dirs=ignore_dirs,
+                    ignore_strs=ignore_strs,
                     ext=ext,
                     split_parts=split_parts,
                 )
