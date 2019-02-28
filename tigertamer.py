@@ -23,16 +23,18 @@ from lib.util.config import (
     config,
     VERSIONSTR,
 )
-from lib.gui.main import (
-    list_funcs,
-    load_gui,
+from lib.util.format import (
+    TigerFile,
 )
-
 from lib.util.logger import (
     debug,
     print_err,
     set_debug_mode,
     status,
+)
+from lib.gui.main import (
+    list_funcs,
+    load_gui,
 )
 from lib.util.parser import (
     create_xml,
@@ -59,6 +61,7 @@ USAGESTR = """{versionstr}
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
+        {script} -V FILE... [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
                  [-n] [-s] [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
@@ -91,6 +94,7 @@ USAGESTR = """{versionstr}
         -u,--unarchive        : Undo any archiving, if possible.
         -U,--UNARCHIVE        : Undo any archiving, and remove all output
                                 files.
+        -V,--view             : View a formatted .tiger file in the console.
         -v,--version          : Show version.
 """.format(author=AUTHOR, script=SCRIPT, versionstr=VERSIONSTR)
 
@@ -125,6 +129,10 @@ def main(argd):
     if argd['--functions']:
         # List functions available for -f.
         return list_funcs()
+
+    if argd['--view']:
+        # View a tiger file.
+        return view_tigerfiles(argd['FILE'])
 
     if argd['--gui'] or argd['--func']:
         # The GUI handles arguments differently, send it the correct config.
@@ -295,6 +303,25 @@ def unarchive(datdir, archdir):
         )
     )
     return errs
+
+
+def view_tigerfile(filepath):
+    """ View a single tiger file in the console.
+        Returns an exit status code.
+    """
+    if not filepath:
+        raise ValueError('No filepath provided!')
+    if not filepath.lower().endswith('.tiger'):
+        raise InvalidArg('not a valid tiger file: {}'.format(filepath))
+    tf = TigerFile.from_file(filepath)
+    return 0 if tf.print() else 1
+
+
+def view_tigerfiles(filepaths):
+    """ View tiger files in the console.
+        Returns an exit status code.
+    """
+    return sum(view_tigerfile(s) for s in filepaths)
 
 
 class InvalidArg(ValueError):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" parser.py
+""" tigertamer - lib/util/parser.py
     CSV (.dat) parser to XML (.tiger) creator for TigerTamer.
     -Christopher Welborn 12-15-2018
 """
@@ -10,8 +10,6 @@ import os
 import re
 import shutil
 from contextlib import suppress
-
-from lxml import etree as ElementTree
 
 from colr import (
     auto_disable as colr_auto_disable,
@@ -24,7 +22,6 @@ from .config import (
 from .logger import (
     debug,
     debug_err,
-    debug_obj,
     print_err,
     status,
 )
@@ -808,12 +805,12 @@ class MozaikMasterPart(object):
         self.count = (
             self.no.count(' ') +
             self.no.count('&') +
-            self.get_cab_count(self.no)
+            self.get_cab_count(self.no, multi_allowed=True)
         )
         return None
 
     @staticmethod
-    def get_cab_count(cabno):
+    def get_cab_count(cabno, multi_allowed=False):
         """ Parse out multiple cab counts from a `no` string (like: R1:1(2)).
             Returns the number inside the parenthesis or 1.
         """
@@ -825,8 +822,12 @@ class MozaikMasterPart(object):
                 align=True,
             )
             return cabcount
-        if '(' in cabno:
-            debug_err('Missed cab count?: {!r}'.format(cabno))
+        if ('(' in cabno):
+            if ((' ' in cabno) or ('&' in cabno)) and multi_allowed:
+                debug('Missed cab count for multi-room: {!r}'.format(cabno))
+            else:
+                debug_err('Missed cab count?: {!r}'.format(cabno))
+                debug_err('<-- get_cab_count() called from.', level=1)
         return 1
 
     def has_multi(self):
@@ -979,115 +980,3 @@ class MozaikMasterPart(object):
 class MozaikPart(MozaikMasterPart):
     """ A part with a width that depends on the MozaikFile's width. """
     header = MozaikFile.header
-
-
-class TigerFile(object):
-    """ A tiger file (XML, .tiger) constructed from a file or XML string with
-        a header and a parts list.
-
-        Typical Header:
-            Index, Quantity, Completed, Length, Part, No, Note
-            ...where Quantity and Completed are TigerStop values, and the
-            others are from the user's printStrings/labelField/labelStrings.
-
-    """
-    def __init__(self, filename=None, parts=None):
-        self.filename = filename or None
-        self.parts = parts or []
-        # Header values always added by tigerstop.
-        self.header_ts = ['Quantity', 'Completed', 'Length']
-        # Header values added by the user through labelStrings.
-        self.header_user = None
-        # Final header for display, set in self.from_bytes().
-        self.header = None
-        self.root = None
-
-    def __str__(self):
-        partlen = len(self.parts)
-        singleitem = partlen == 1
-        return '{}(filename={!r}, parts={})'.format(
-            type(self).__name__,
-            self.filename,
-            '[{} {}{}]'.format(
-                partlen,
-                'part' if singleitem else 'parts',
-                '' if singleitem else '..',
-            ),
-        )
-
-    def _build_headers(self, rootelem):
-        """ Set self.header with values from `header_ts` and `header_user`,
-            calling `_parse_user_headers()` to get them.
-        """
-        # Get user headers.
-        self.header_user = self._parse_user_headers(rootelem)
-        if not self.header_user:
-            raise ValueError(
-                'No user headers!: {!r}'.format(self.header_user)
-            )
-        if self.header_user.lower() in ('index', 'count'):
-            self.header = [self.header_user[0]]
-            skip = 1
-        else:
-            self.header = []
-            skip = 0
-        self.header.extend(self.header_ts)
-        self.header.extend(self.header_user[skip:])
-
-    @classmethod
-    def from_file(cls, filename):
-        with open(filename, 'rb') as f:
-            tf = cls.from_bytes(f.read())
-            tf.filename = filename
-        return tf
-
-    @classmethod
-    def from_bytes(cls, b, filename=None):
-        """ Create a TigerFile from XML bytes (a .tiger file's content). """
-        tf = cls(filename=filename)
-        root = ElementTree.fromstring(b)
-
-        tf._build_headers(root)
-        tf.parts = tf._parse_pieces(root)
-        return tf
-
-    def _parse_pieces(self, rootelem):
-        # Parse parts in <pieces><Piece>..</Piece>..</pieces>
-        if not self.header_user:
-            raise ValueError('Headers not set (needs _build_headers())!')
-
-        parts = []
-        for piece in rootelem.iter('Piece'):
-            partinfo = {
-                'length': piece.find('length').text,
-                'quantity': int(piece.find('quantity').text),
-                'completed': int(piece.find('completed').text),
-
-            }
-            lblstrs = piece.find('labelStrings')
-            # Expecting Index, Part, No, and optional Note <string>s.
-            userstrs = [
-                (i, string.text)
-                for i, string in enumerate(lblstrs.findall('string'))
-            ]
-            for index, value in userstrs:
-                lbl = self.header_user[index]
-                if lbl.lower() in ('index', 'count'):
-                    value = int(value)
-                partinfo[lbl] = value
-
-            parts.append(partinfo)
-        return parts
-
-    @classmethod
-    def _parse_user_headers(cls, rootelem):
-        """ Grab all <header>s from <printStrings>, and return the text
-            in a list, using <column> for the list index.
-            Returns a list of user headers from a .tiger file root element.
-        """
-
-        user_headers = []
-        for lblfield in rootelem.find('printStrings'):
-            index = int(lblfield.find('column').text)
-            user_headers.insert(index, lblfield.find('header').text)
-        return user_headers
