@@ -62,11 +62,12 @@ def config_increment(**kwargs):
             debug_err('Tried to increment by 0. Cancelling.')
             return False
         debug(
-            'Incrementing: {!r}={!r} + {!r} (default: {!r})'.format(
-                key,
-                v,
-                value,
-                'Nothing' if default is Nothing else default,
+            'Incrementing: {k!r:>16} =  {v!r} + {newv!r}'.format(
+                k=key,
+                v=v or '(default: {})'.format(
+                    'Nothing' if default is Nothing else default
+                ),
+                newv=value,
             )
         )
 
@@ -80,7 +81,17 @@ def config_increment(**kwargs):
                     ex)
             )
             return False
-    return config_save()
+        else:
+            debug(
+                ' Incremented: {k!r:>16} == {v!r}'.format(
+                    k=key,
+                    v=config[key],
+                ),
+                align=True,
+            )
+
+    # Multithreaded Tkinter windows are not using 'globals' like they should.
+    return config_save(config)
 
 
 def config_load():

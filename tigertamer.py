@@ -11,6 +11,7 @@
 
 import os
 import sys
+from time import time
 
 from colr import (
     auto_disable as colr_auto_disable,
@@ -21,6 +22,7 @@ from colr import (
 from lib.util.config import (
     AUTHOR,
     config,
+    config_increment,
     VERSIONSTR,
 )
 from lib.util.format import (
@@ -172,6 +174,9 @@ def main(argd):
     # Run in console mode.
     if not inpaths:
         raise InvalidArg('No input files/directories!')
+
+    time_start = time()
+
     mozfiles = load_moz_files(
         inpaths,
         ignore_dirs=ignore_dirs,
@@ -208,6 +213,14 @@ def main(argd):
     )
     for pfile in sorted(parentfiles):
         debug('Parent file: {}'.format(pfile))
+
+    config_increment(
+        master_files=parentlen,
+        tiger_files=len(mozfiles),
+        runs=1,
+        runtime_secs=time() - time_start,
+        default=0,
+    )
     return errs
 
 
@@ -273,6 +286,7 @@ def remove_tiger_files(outdir):
             'Error' if errs == 1 else 'Errors',
         )
     )
+    config_increment(remove_files=success, default=0)
     return errs
 
 
@@ -302,6 +316,7 @@ def unarchive(datdir, archdir):
             'Error' if errs == 1 else 'Errors',
         )
     )
+    config_increment(unarchive_files=success, default=0)
     return errs
 
 
