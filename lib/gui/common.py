@@ -13,9 +13,13 @@ from tkinter import messagebox
 
 from ..util.logger import (
     debug,
+    debug_exc,
     print_err,
 )
-from ..util.config import NAME
+from ..util.config import (
+    NAME,
+    lock_release,
+)
 
 
 def create_event_handler(func):
@@ -154,6 +158,7 @@ class TkErrorLogger(object):
         except Exception as ex:
             # Log the message, and show an error dialog.
             print_err('GUI Error: ({})'.format(type(ex).__name__))
+            debug_exc()
             messagebox.showerror(
                 title='{} - Error'.format(NAME),
                 message=str(ex),

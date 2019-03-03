@@ -11,6 +11,8 @@ from time import time
 from ..util.config import (
     config_increment,
     config_save,
+    lock_acquire,
+    lock_release,
     ICONFILE,
     NAME,
 )
@@ -717,6 +719,7 @@ class WinMain(tk.Tk):
                 'geometry_viewer': self.config_gui['geometry_viewer'],
             },
             destroy_cb=lambda: self.enable_interface(True),
+            filename=None,
         )
         return True
 
@@ -879,9 +882,18 @@ def load_gui(**kwargs):
     win = WinMain(**kwargs)  # noqa
     debug('Starting main window...')
     try:
+        lock_acquire()
+    except ValueError:
+        win.attributes('-topmost', 0)
+        win.withdraw()
+        print_err('{} is already running.'.format(NAME))
+        return 3
+    try:
         tk.mainloop()
     except Exception as ex:
         print_err('Main loop error: ({})\n{}'.format(
             type(ex).__name__,
             ex,
         ))
+        return 1
+    return 0

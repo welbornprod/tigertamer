@@ -23,6 +23,9 @@ from lib.util.config import (
     AUTHOR,
     config,
     config_increment,
+    lock_acquire,
+    lock_release,
+    NAME,
     VERSIONSTR,
 )
 from lib.util.format import (
@@ -128,13 +131,6 @@ def main(argd):
     # Handle config/arg flags.
     argd['--extra'] = config.get('extra_data', argd['--extra'])
     argd['--nosplit'] = config.get('no_part_split', argd['--nosplit'])
-    if argd['--functions']:
-        # List functions available for -f.
-        return list_funcs()
-
-    if argd['--view']:
-        # View a tiger file.
-        return view_tigerfiles(argd['FILE'])
 
     if argd['--gui'] or argd['--func']:
         # The GUI handles arguments differently, send it the correct config.
@@ -156,6 +152,21 @@ def main(argd):
             ignore_strs=tuple(ignore_strs),
             run_function=argd['--func'],
         )
+
+    # Console mode, need a lock.
+    try:
+        lock_acquire()
+    except ValueError:
+        print_err('{} already running.'.format(NAME))
+        return 3
+
+    if argd['--functions']:
+        # List functions available for -f.
+        return list_funcs()
+
+    if argd['--view']:
+        # View a tiger file.
+        return view_tigerfiles(argd['FILE'])
 
     if argd['--unarchive'] or argd['--UNARCHIVE']:
         if not options_are_set(inpaths, archdir):
@@ -357,7 +368,7 @@ class InvalidConfig(InvalidArg):
         return 'Invalid config!'
 
 
-if __name__ == '__main__':
+def entry_point():
     try:
         mainret = main(docopt(USAGESTR, version=VERSIONSTR, script=SCRIPT))
     except InvalidArg as ex:
@@ -369,4 +380,9 @@ if __name__ == '__main__':
     except BrokenPipeError:
         print_err('\nBroken pipe, input/output was interrupted.\n')
         mainret = 3
+    lock_release()
     sys.exit(mainret)
+
+
+if __name__ == '__main__':
+    entry_point()

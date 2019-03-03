@@ -17,21 +17,26 @@ from .logger import (
 )
 
 NAME = 'Tiger Tamer'
-VERSION = '0.2.2'
+VERSION = '0.2.3'
 AUTHOR = 'Christopher Joseph Welborn'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
 SCRIPTDIR = os.path.abspath(sys.path[0])
 
 CONFIGFILE = os.path.join(SCRIPTDIR, 'tigertamer.json')
+LOCKFILE = os.path.join(SCRIPTDIR, 'tigertamer.lock')
 ICONFILE = os.path.join(
     SCRIPTDIR,
     'resources',
     'tigertamer-icon.png'
 )
 
+# pid used for checking the file lock.
+PID = os.getpid()
+
 # Something besides None, to mean No Value.
 Nothing = object()
+
 
 try:
     config = JSONSettings.from_file(CONFIGFILE)
@@ -143,3 +148,38 @@ def get_system_info():
         'unarchive_files': config.get('unarchive_files', 0),
         'remove_files': config.get('remove_files', 0),
     }
+
+
+def lock_acquire():
+    """ Try acquiring the file lock. Raise ValueError if the lock is already
+        acquired.
+    """
+    if os.path.exists(LOCKFILE):
+        debug('Lock already acquired: {}'.format(LOCKFILE), level=1)
+        raise ValueError('File lock already acquired: {}'.format(LOCKFILE))
+    with open(LOCKFILE, 'w') as f:
+        f.write(str(PID))
+    debug('Lock acquired: {}'.format(LOCKFILE), level=1)
+
+
+def lock_release():
+    """ Release the file lock. """
+    if not os.path.exists(LOCKFILE):
+        debug('Lock already released: {}'.format(LOCKFILE), level=1)
+        return True
+
+    with open(LOCKFILE, 'r') as f:
+        pid = int(f.read())
+    if pid != PID:
+        debug(
+            'Lock not owned by this process: {} != {}'.format(
+                pid,
+                PID,
+            ),
+            level=1
+        )
+        return False
+    # Lock is owned by this process.
+    os.remove(LOCKFILE)
+    debug('Lock released: {}'.format(LOCKFILE), level=1)
+    return True

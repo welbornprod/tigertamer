@@ -346,6 +346,14 @@ class TigerPart(object):
             in TigerFile.header.
         """
         for key, val in data.items():
+            if val is not None:
+                try:
+                    val = int(val)
+                except ValueError:
+                    try:
+                        val = float(val)
+                    except ValueError:
+                        val = str(val)
             setattr(self, key.lower(), val)
         if ('Note' in data) and ('Note' not in self.header):
             self.header.append('Note')
