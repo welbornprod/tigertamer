@@ -272,6 +272,14 @@ class TigerFile(object):
         tf.parts = tf._parse_pieces(root)
         return tf
 
+    @classmethod
+    def from_mozfile(cls, mozfile):
+        """ Creates a TigerFile from a MozaikFile instance. """
+        return cls.from_bytes(
+            create_xml(mozfile).encode(),
+            filename=mozfile.filename,
+        )
+
     def _parse_pieces(self, rootelem):
         # Parse parts in <pieces><Piece>..</Piece>..</pieces>
         if not self.header_user:

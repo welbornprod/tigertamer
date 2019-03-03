@@ -98,6 +98,12 @@ def show_question(msg, title=None):
     return messagebox.askyesno(title=title, message=str(msg))
 
 
+def show_warning(msg, title=None):
+    """ Show a tkinter warning dialog. """
+    title = '{} - {}'.format(NAME, title or 'Warning')
+    return messagebox.showwarning(title=title, message=str(msg))
+
+
 def trim_file_path(filepath):
     """ Trim most of the directories off of a file path.
         Leaves only the file name, and one sub directory.

@@ -152,7 +152,7 @@ class WinMain(tk.Tk):
         self.menu_admin = tk.Menu(self.menu_main, tearoff=0)
         adminsortkey = lambda k: hotkeys['admin'][k].get('order', 99)  # noqa
         for lbl in sorted(sorted(hotkeys['admin']), key=adminsortkey):
-            if lbl == '-':
+            if lbl.startswith('-'):
                 self.menu_admin.add_separator()
                 continue
             admininfo = hotkeys['admin'][lbl]
@@ -719,7 +719,9 @@ class WinMain(tk.Tk):
                 'geometry_viewer': self.config_gui['geometry_viewer'],
             },
             destroy_cb=lambda: self.enable_interface(True),
-            filename=None,
+            dat_dir=self.entry_dat.get(),
+            tiger_dir=self.entry_tiger.get(),
+            filenames=None,
         )
         return True
 
@@ -788,7 +790,7 @@ class WinMain(tk.Tk):
             self.btn_arch,
         )
         for widget in widgets:
-            widget['state'] = state
+            widget.configure(state=state)
 
         # Main menus.
         menus = (

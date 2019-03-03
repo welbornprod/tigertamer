@@ -11,6 +11,7 @@ from .common import (
     filedialog,
     handle_cb,
     show_error,
+    show_question,
     tk,
     ttk,
 )
@@ -31,6 +32,9 @@ from ..util.logger import (
     debug_err,
     debug_obj,
 )
+from ..util.parser import (
+    MozaikMasterFile,
+)
 
 
 class WinViewer(tk.Toplevel):
@@ -39,11 +43,13 @@ class WinViewer(tk.Toplevel):
         try:
             self.config_gui = kwargs.pop('config_gui')
             self.destroy_cb = kwargs.pop('destroy_cb')
+            self.dat_dir = kwargs.pop('dat_dir')
+            self.tiger_dir = kwargs.pop('tiger_dir')
         except KeyError as ex:
             raise TypeError('Missing required kwarg: {}'.format(ex))
         try:
             # Required, but may be None values.
-            self.filename = kwargs.pop('filename')
+            self.filenames = kwargs.pop('filenames') or []
         except KeyError as ex:
             raise TypeError('Missing required kwarg, may be None: {}'.format(
                 ex
@@ -65,17 +71,32 @@ class WinViewer(tk.Toplevel):
                     'func': self.cmd_btn_open,
                     'order': 0,
                 },
-                '-': {'order': 1},
+                'Close': {
+                    'char': 'C',
+                    'func': self.cmd_btn_close,
+                    'order': 1,
+                },
+                '-': {'order': 2},
+                'Preview Mozaik File': {
+                    'char': 'P',
+                    'func': self.cmd_btn_preview,
+                    'order': 3,
+                },
+                '--': {'order': 4},
                 'Exit': {
                     'char': 'x',
                     'func': self.cmd_btn_exit,
-                    'order': 2,
+                    'order': 5,
                 },
             },
             'btns': {
                 'Open': {
                     'char': 'O',
                     'func': self.cmd_btn_open,
+                },
+                'Close': {
+                    'char': 'C',
+                    'func': self.cmd_btn_close,
                 },
                 'Exit': {
                     'char': 'x',
@@ -90,7 +111,7 @@ class WinViewer(tk.Toplevel):
         self.menu_file = tk.Menu(self.menu_main, tearoff=0)
         filesortkey = lambda k: hotkeys['file'][k].get('order', 99)  # noqa
         for lbl in sorted(sorted(hotkeys['file']), key=filesortkey):
-            if lbl == '-':
+            if lbl.startswith('-'):
                 self.menu_file.add_separator()
                 continue
             fileinfo = hotkeys['file'][lbl]
@@ -123,6 +144,12 @@ class WinViewer(tk.Toplevel):
         for x in range(1):
             self.frm_main.columnconfigure(x, weight=1)
 
+        # Build Notebook.
+        self.notebook = ttk.Notebook(self.frm_main)
+        self.notebook.pack(
+            fill=tk.BOTH,
+            expand=True,
+        )
         # Columns for file view frame.
         self.columns = (
             'index',
@@ -135,67 +162,19 @@ class WinViewer(tk.Toplevel):
         )
         # Column settings for file view frame.
         self.column_info = {
-            'index': {'minwidth': 60, 'width': 60},
-            'quantity': {'minwidth': 80, 'width': 80},
-            'completed': {'minwidth': 100, 'width': 100},
-            'length': {'minwidth': 70, 'width': 70},
-            'part': {'minwidth': 60, 'width': 60},
-            'no': {'minwidth': 60, 'width': 60},
-            'note': {'minwidth': 60, 'width': 60},
+            'index': {'minwidth': 60, 'width': 60, 'anchor': tk.E},
+            'quantity': {'minwidth': 80, 'width': 80, 'anchor': tk.E},
+            'completed': {'minwidth': 100, 'width': 100, 'anchor': tk.E},
+            'length': {'minwidth': 70, 'width': 70, 'anchor': tk.E},
+            'part': {'minwidth': 60, 'width': 60, 'anchor': tk.CENTER},
+            'no': {'minwidth': 60, 'width': 60, 'anchor': tk.W},
+            'note': {'minwidth': 60, 'width': 60, 'anchor': tk.W},
         }
-        # Build file view frame
-        self.frm_view = ttk.Frame(
-            self.frm_main,
-            padding='2 2 2 2',
-        )
-        self.frm_view.pack(fill=tk.X, expand=True)
-        self.tree_view = ttk.Treeview(
-            self.frm_view,
-            selectmode='none',
-            height=15,
-        )
-        self.tree_view.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.tree_view.configure(
-            columns=self.columns,
-            show='headings',
-        )
-        for colname in self.columns:
-            self.tree_view.column(colname, **self.column_info[colname])
-            self.tree_view.heading(
-                colname,
-                anchor='w',
-                text=' {}:'.format(colname.title()),
-            )
+        # References to LabelFrames/Treeviews for each file, for removing.
+        # These are set in `self.build_tab()`.
+        self.lbl_views = []
+        self.tree_views = []
 
-        self.scroll_view = ttk.Scrollbar(
-            self.frm_view,
-            orient='vertical',
-            command=self.tree_view.yview,
-        )
-        self.tree_view.configure(
-            yscrollcommand=self.scroll_view.set
-        )
-        self.scroll_view.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
-        self.tree_view.tag_configure(
-            'odd',
-            background='#FFFFFF',
-            font='Arial 10',
-        )
-        self.tree_view.tag_configure(
-            'even',
-            background='#DADADA',
-            font='Arial 10',
-        )
-        self.tree_view.tag_configure(
-            'odd_completed',
-            background='#CCFFCC',
-            font='Arial 10',
-        )
-        self.tree_view.tag_configure(
-            'even_completed',
-            background='#AAFFAA',
-            font='Arial 10',
-        )
         # Build Open/Exit buttons frame
         self.frm_cmds = ttk.Frame(
             self.frm_main,
@@ -225,6 +204,27 @@ class WinViewer(tk.Toplevel):
         # Set focus to the Open button
         self.btn_open.focus_set()
 
+        # Close button
+        closelbl = 'Close'
+        closeinfo = hotkeys['btns'][closelbl]
+        self.btn_close = ttk.Button(
+            self.frm_cmds,
+            text=closelbl,
+            underline=closelbl.index(closeinfo['char']),
+            width=5,
+            command=closeinfo['func'],
+        )
+        self.btn_close.pack(
+            side=tk.LEFT,
+            fill=tk.NONE,
+            expand=False,
+            anchor='nw',
+            padx=2,
+            ipadx=8,
+            ipady=8,
+        )
+        self.enable_close(False)
+
         # Exit button
         exitlbl = 'Exit'
         exitinfo = hotkeys['btns'][exitlbl]
@@ -252,26 +252,178 @@ class WinViewer(tk.Toplevel):
                 create_event_handler(btninfo['func']),
             )
         # Open file passed in with kwargs?
-        if self.filename:
-            self.view_file(self.filename)
+        if self.filenames:
+            self.view_files(self.filenames)
+        else:
+            self.build_tab()
+
+    def build_tab(self, filename=None):
+        frm_view = ttk.Frame(
+            master=self.notebook,
+            padding='2 2 2 2',
+        )
+        frm_view.pack(fill=tk.BOTH, expand=True)
+        frm_tree = ttk.Frame(
+            master=frm_view,
+            padding='2 2 2 2',
+        )
+        frm_tree.pack(
+            side=tk.TOP,
+            fill=tk.BOTH,
+            expand=True,
+        )
+        tree_view = ttk.Treeview(
+            frm_tree,
+            selectmode='browse',
+            height=15,
+        )
+        tree_view.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tree_view.configure(
+            columns=self.columns,
+            show='headings',
+        )
+        for colname in self.columns:
+            tree_view.column(colname, **self.column_info[colname])
+            tree_view.heading(
+                colname,
+                anchor=tk.CENTER,
+                text='{}:'.format(colname.title()),
+            )
+
+        scroll_view = ttk.Scrollbar(
+            frm_tree,
+            orient='vertical',
+            command=tree_view.yview,
+        )
+        tree_view.configure(
+            yscrollcommand=scroll_view.set
+        )
+        scroll_view.pack(
+            side=tk.RIGHT,
+            fill=tk.Y,
+            expand=False,
+        )
+        tree_view.tag_configure(
+            'odd',
+            background='#FFFFFF',
+            font='Arial 10',
+        )
+        tree_view.tag_configure(
+            'even',
+            background='#DADADA',
+            font='Arial 10',
+        )
+        tree_view.tag_configure(
+            'odd_completed',
+            background='#CCFFCC',
+            font='Arial 10',
+        )
+        tree_view.tag_configure(
+            'even_completed',
+            background='#AAFFAA',
+            font='Arial 10',
+        )
+        lbl_view = ttk.Label(
+            master=frm_view,
+            foreground='#6C6C6C',
+            text=filename,
+        )
+        lbl_view.pack(
+            side=tk.BOTTOM,
+            fill=tk.X,
+            expand=True,
+            padx=2,
+            pady=2,
+        )
+
+        # Save references to these, for modifying/removing.
+        self.lbl_views.append(lbl_view)
+        self.tree_views.append(tree_view)
+
+        if filename:
+            # Use short file name for tab text.
+            fname = os.path.split(filename)[-1]
+            text = os.path.splitext(fname)[0]
+        else:
+            text = None
+        self.notebook.add(frm_view, text=text or 'No File')
+        debug('Added a new tab for: {}'.format(text or 'Unknown'))
+        return tree_view
+
+    def clear_tabs(self, tabids=None):
+        """ Clear a list of tabs, or ALL tabs if none are specified. """
+        if not tabids:
+            tabids = self.notebook.tabs()
+        for tabid in tabids:
+            self.remove_tab(tabid)
+
+    def clear_treeview(self, index):
+        self.tree_views[index].delete(*self.tree_views[index].get_children())
+
+    def cmd_btn_close(self):
+        """ Close the currently selected tab. """
+        if not self.filenames:
+            self.show_error('No files to close.')
+            return
+        currentid = self.notebook.select()
+        self.remove_tab(currentid)
+        debug('Removed tab: {}'.format(currentid))
 
     def cmd_btn_exit(self):
         return self.destroy()
 
     def cmd_btn_open(self):
         """ Pick a file with a Tk file dialog, and open it. """
-        self.attributes('-topmost', 0)
-        self.withdraw()
-        filename = filedialog.askopenfilename()
-        self.attributes('-topmost', 1)
-        self.deiconify()
-        if not filename:
+        filenames = self.dialog_files(
+            initialdir=self.tiger_dir,
+            filetypes=(('Tiger Files', '*.tiger'), ),
+        )
+        if not filenames:
             return
-        if not os.path.exists(filename):
-            show_error('File does not exist:\n{}'.format(filename))
-            return
+        for filename in filenames:
+            if not os.path.exists(filename):
+                self.show_error('File does not exist:\n{}'.format(filename))
+                return
+            try:
+                existingindex = self.filenames.index(filename)
+            except ValueError:
+                pass
+            else:
+                # Remove the existing tab to reload this file.
+                self.remove_tab(existingindex)
 
-        return self.view_file(filename)
+        return self.view_files(filenames)
+
+    def cmd_btn_preview(self):
+        filenames = self.dialog_files(
+            initialdir=self.dat_dir,
+            filetypes=(('Mozaik Files', '*.dat'), ),
+        )
+        if not filenames:
+            return
+        # Clear all tabs.
+        self.clear_tabs()
+
+        for filename in filenames:
+            if not os.path.exists(filename):
+                self.show_error('File does not exist:\n{}'.format(filename))
+                return
+            st = os.stat(filename)
+            bytesize = st.st_size
+            if bytesize > 4000:
+                msg = '\n'.join((
+                    'File is large:',
+                    filename,
+                    '',
+                    'This may take a minute, continue?'
+                ))
+                if not self.show_question(msg):
+                    return
+        masterfiles = [
+            MozaikMasterFile.from_file(s, split_parts=True)
+            for s in filenames
+        ]
+        return self.view_masterfiles(masterfiles)
 
     def destroy(self):
         debug('Saving gui-viewer config...')
@@ -285,6 +437,23 @@ class WinViewer(tk.Toplevel):
         super().destroy()
         debug('Calling destroy_cb({})...'.format(self.destroy_cb))
         handle_cb(self.destroy_cb)
+
+    def dialog_files(self, initialdir=None, filetypes=None):
+        """ Use tk.filedialog.askopenfiles(), and return the result. """
+        self.attributes('-topmost', 0)
+        self.withdraw()
+        filenames = filedialog.askopenfilenames(
+            initialdir=initialdir,
+            filetypes=filetypes,
+        )
+        self.attributes('-topmost', 1)
+        self.deiconify()
+        return filenames
+
+    def enable_close(self, enabled):
+        state = tk.NORMAL if enabled else tk.DISABLED
+        self.btn_close.configure(state=state)
+        self.menu_file.entryconfigure('Close', state=state)
 
     def format_value(self, column, value):
         """ Format a value for the tree_view, with decent default values. """
@@ -302,12 +471,86 @@ class WinViewer(tk.Toplevel):
             value = '{:0.2f}'.format(float(value))
         return str(value)
 
+    def remove_tab(self, tabid):
+        """ Remove a tab and it's associated file name. """
+        try:
+            tabid = int(tabid)
+        except ValueError:
+            # Tab id str.
+            tabid = self.notebook.index(tabid)
+        if tabid == 0 and not self.filenames:
+            # Can't remove the default tab.
+            debug('Not removing the default tab.')
+            return
+        # Normal index
+        self.notebook.forget(tabid)
+        self.filenames.pop(tabid)
+        self.lbl_views.pop(tabid)
+        self.tree_views.pop(tabid)
+        if not self.filenames:
+            # Rebuild the default tab.
+            self.build_tab()
+            self.enable_close(False)
+
+    def show_error(self, msg, title=None):
+        """ Use show_error, but make sure this window is out of the way. """
+        self.attributes('-topmost', 0)
+        self.withdraw()
+        show_error(msg, title=title)
+        self.attributes('-topmost', 1)
+        self.deiconify()
+
+    def show_question(self, msg, title=None):
+        """ Use show_question, but make sure this window is out of the way.
+        """
+        self.attributes('-topmost', 0)
+        self.withdraw()
+        ret = show_question(msg, title=title)
+        self.attributes('-topmost', 1)
+        self.deiconify()
+        return ret
+
     def view_file(self, filename):
-        """ Load file contents into tree_view. """
-        self.tree_view.delete(*self.tree_view.get_children())
-        self.filename = filename
+        """ Load file contents into a new tab. """
         tf = TigerFile.from_file(filename)
-        for i, part in enumerate(tf.parts):
+        self.view_tigerfile(tf)
+
+    def view_files(self, filenames):
+        for filename in filenames:
+            self.view_file(filename)
+
+    def view_masterfile(self, masterfile):
+        """ Load parts from a MozaikMasterFile into a new tab. """
+        for mozfile in masterfile.into_width_files():
+            self.view_mozfile(mozfile)
+
+    def view_masterfiles(self, masterfiles):
+        """ Load parts from multiple MozaikMasterFiles into a new tab. """
+        for masterfile in masterfiles:
+            self.view_masterfile(masterfile)
+
+    def view_mozfile(self, mozfile):
+        """ Load parts from a MozaikFile into a new tab. """
+        tf = TigerFile.from_mozfile(mozfile)
+        return self.view_tigerfile(tf)
+
+    def view_tigerfile(self, tigerfile):
+        """ Load TigerFile instance parts into a new tab. """
+        if self.filenames:
+            # Adding another file.
+            tree_view = self.build_tab(filename=tigerfile.filename)
+        else:
+            # Using the default (empty) tree_view.
+            tree_view = self.tree_views[0]
+            lbl_view = self.lbl_views[0]
+            lbl_view.configure(text=tigerfile.filename)
+            fname = os.path.split(tigerfile.filename)[-1]
+            fname = os.path.splitext(fname)[0]
+            self.notebook.tab(0, text=fname)
+
+        self.filenames.append(tigerfile.filename)
+
+        for i, part in enumerate(tigerfile.parts):
             # Get raw part values.
             values = [
                 getattr(part, colname, None)
@@ -319,7 +562,7 @@ class WinViewer(tk.Toplevel):
             tag = 'odd' if i % 2 else 'even'
             tag = '{}{}'.format(tag, '' if remaining else '_completed')
             # Insert formatted values:
-            self.tree_view.insert(
+            tree_view.insert(
                 '',
                 tk.END,
                 values=tuple(
@@ -329,4 +572,5 @@ class WinViewer(tk.Toplevel):
                 text='',
                 tag=tag,
             )
-        self.title('{}: {}'.format(self.default_title, self.filename))
+        self.notebook.select(self.notebook.tabs()[-1])
+        self.enable_close(True)
