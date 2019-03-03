@@ -328,7 +328,6 @@ class WinUnarchive(tk.Toplevel):
             config_gui={
                 'geometry_report': self.config_gui['geometry_report'],
             },
-            theme=self.theme,
             parent_files=[trim_file_path(s) for s in parent_files],
             error_files=[
                 (trim_file_path(s), m) for s, m in error_files
