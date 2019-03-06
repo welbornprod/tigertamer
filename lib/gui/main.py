@@ -53,16 +53,11 @@ from .viewer import WinViewer
 class WinMain(tk.Tk):
     default_theme = 'clam'
 
-    def __init__(self, *args, **kwargs):
-        try:
-            self.run_function = kwargs.pop('run_function')
-        except KeyError:
-            self.run_function = None
-        self.config_gui = {k: v for k, v in kwargs.items()}
+    def __init__(self, *, run_function=None, **kwargs):
+        self.run_function = run_function or None
+        self.settings = {k: v for k, v in kwargs.items()}
         # Don't send WinMain kwargs to Tk.
-        for key in self.config_gui:
-            kwargs.pop(key)
-        super().__init__(*args, **kwargs)
+        super().__init__()
 
         # Set icon for main window and all children.
         try:
@@ -72,17 +67,17 @@ class WinMain(tk.Tk):
             print_err('Failed to set icon: {}\n{}'.format(ICONFILE, ex))
             self.main_icon = None
 
-        debug_obj(self.config_gui, msg='Using GUI config:')
+        debug_obj(self.settings, msg='Using GUI config:')
 
         self.title('Tiger Tamer')
-        self.geometry(self.config_gui.get('geometry', '331x301'))
+        self.geometry(self.settings.get('geometry', '331x301'))
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
         self.frm_main.pack(fill=tk.BOTH, expand=True)
         self.style = ttk.Style()
 
         # knownstyles = ('clam', 'alt', 'default', 'classic')
         self.known_themes = sorted(self.style.theme_names())
-        usetheme = self.config_gui.get('theme', 'clam').lower()
+        usetheme = self.settings.get('theme', 'clam').lower()
         if usetheme not in self.known_themes:
             debug_err('Invalid theme name: {}'.format(usetheme))
             debug_err('Using {!r}'.format(self.default_theme))
@@ -255,7 +250,7 @@ class WinMain(tk.Tk):
         )
         # Auto exit?
         self.var_auto_exit = tk.BooleanVar()
-        self.var_auto_exit.set(self.config_gui.get('auto_exit', False))
+        self.var_auto_exit.set(self.settings.get('auto_exit', False))
         self.chk_auto_exit = ttk.Checkbutton(
             self.frm_opts_left,
             text='Exit after report',
@@ -270,7 +265,7 @@ class WinMain(tk.Tk):
         )
         # Extra data?
         self.var_extra_data = tk.BooleanVar()
-        self.var_extra_data.set(self.config_gui.get('extra_data', False))
+        self.var_extra_data.set(self.settings.get('extra_data', False))
         self.chk_extra_data = ttk.Checkbutton(
             self.frm_opts_left,
             text='Use extra data',
@@ -311,7 +306,7 @@ class WinMain(tk.Tk):
         )
         # Split parts?
         self.var_no_part_split = tk.BooleanVar()
-        self.var_no_part_split.set(self.config_gui.get('no_part_split', True))
+        self.var_no_part_split.set(self.settings.get('no_part_split', True))
         self.chk_no_part_split = ttk.Checkbutton(
             self.frm_opts_right,
             text='Don\'t split parts',
@@ -383,7 +378,7 @@ class WinMain(tk.Tk):
         if self.run_function:
             # Auto run function?
             self.call_by_name(self.run_function)
-        elif self.config_gui.get('auto_run', False):
+        elif self.settings.get('auto_run', False):
             # Auto run?
             self.cmd_btn_run()
 
@@ -427,7 +422,7 @@ class WinMain(tk.Tk):
             )
         )
         entry = getattr(self, entryname)
-        configdir = self.config_gui.get(config_key, '')
+        configdir = self.settings.get(config_key, '')
         if not isinstance(configdir, str):
             # Handle possible lists of directories in `dat_dir`.
             configdir = configdir[0]
@@ -492,7 +487,7 @@ class WinMain(tk.Tk):
         if not arch_dir:
             return
         self.var_arch.set(arch_dir)
-        self.config_gui['archive_dir'] = arch_dir
+        self.settings['archive_dir'] = arch_dir
         debug('Selected new archive directory: {}'.format(
             self.var_arch.get()
         ))
@@ -503,7 +498,7 @@ class WinMain(tk.Tk):
         if not dat_dir:
             return
         self.var_dat.set(dat_dir)
-        self.config_gui['dat_dir'] = [dat_dir]
+        self.settings['dat_dir'] = [dat_dir]
         debug('Selected new Mozaik directory: {}'.format(
             self.var_dat.get()
         ))
@@ -523,8 +518,8 @@ class WinMain(tk.Tk):
         try:
             mozfiles = load_moz_files(
                 filepaths=mozdir,
-                ignore_dirs=self.config_gui['ignore_dirs'],
-                ignore_strs=self.config_gui['ignore_strs'],
+                ignore_dirs=self.settings['ignore_dirs'],
+                ignore_strs=self.settings['ignore_strs'],
                 split_parts=not self.var_no_part_split.get(),
             )
         except OSError as ex:
@@ -611,7 +606,7 @@ class WinMain(tk.Tk):
         if not tiger_dir:
             return
         self.var_tiger.set(tiger_dir)
-        self.config_gui['tiger_dir'] = tiger_dir
+        self.settings['tiger_dir'] = tiger_dir
         debug('Selected new tiger directory: {}'.format(
             self.var_dat.get()
         ))
@@ -626,7 +621,7 @@ class WinMain(tk.Tk):
         self.enable_interface(False)
         self.win_about = WinAbout(
             self,
-            config_gui={'geometry_about': self.config_gui['geometry_about']},
+            settings={'geometry_about': self.settings['geometry_about']},
             destroy_cb=lambda: self.report_closed(
                 allow_auto_exit=False,
             ),
@@ -695,9 +690,9 @@ class WinMain(tk.Tk):
         self.enable_interface(False)
         self.win_unarchive = WinUnarchive(
             self,
-            config_gui={
-                'geometry_report': self.config_gui['geometry_report'],
-                'geometry_unarchive': self.config_gui['geometry_unarchive'],
+            settings={
+                'geometry_report': self.settings['geometry_report'],
+                'geometry_unarchive': self.settings['geometry_unarchive'],
             },
             destroy_cb=lambda: self.enable_interface(True),
             report_cb=report_cb,
@@ -710,18 +705,18 @@ class WinMain(tk.Tk):
         """ Handles menu->Unarchive and Remove Tiger Files """
         return self.cmd_menu_unarchive(remove_tiger_files=True)
 
-    def cmd_menu_viewer(self):
+    def cmd_menu_viewer(self, filenames=None):
         """ Handles menu->Tiger Viewer click. """
         self.enable_interface(False)
         self.win_viewer = WinViewer(
             self,
-            config_gui={
-                'geometry_viewer': self.config_gui['geometry_viewer'],
+            settings={
+                'geometry_viewer': self.settings['geometry_viewer'],
             },
             destroy_cb=lambda: self.enable_interface(True),
             dat_dir=self.entry_dat.get(),
             tiger_dir=self.entry_tiger.get(),
-            filenames=None,
+            filenames=filenames,
         )
         return True
 
@@ -753,20 +748,20 @@ class WinMain(tk.Tk):
 
     def destroy(self):
         debug('Saving gui config...')
-        self.config_gui['dat_dir'] = [self.entry_dat.get()]
-        self.config_gui['tiger_dir'] = self.entry_tiger.get()
-        self.config_gui['archive_dir'] = self.entry_arch.get()
-        self.config_gui['geometry'] = self.geometry()
-        self.config_gui['theme'] = self.theme
-        self.config_gui['auto_exit'] = self.var_auto_exit.get()
-        self.config_gui['extra_data'] = self.var_extra_data.get()
-        self.config_gui['no_part_split'] = self.var_no_part_split.get()
+        self.settings['dat_dir'] = [self.entry_dat.get()]
+        self.settings['tiger_dir'] = self.entry_tiger.get()
+        self.settings['archive_dir'] = self.entry_arch.get()
+        self.settings['geometry'] = self.geometry()
+        self.settings['theme'] = self.theme
+        self.settings['auto_exit'] = self.var_auto_exit.get()
+        self.settings['extra_data'] = self.var_extra_data.get()
+        self.settings['no_part_split'] = self.var_no_part_split.get()
         # Child windows have saved their geometry already.
-        self.config_gui.pop('geometry_report')
-        self.config_gui.pop('geometry_about')
-        self.config_gui.pop('geometry_unarchive')
-        self.config_gui.pop('geometry_viewer')
-        config_save(self.config_gui)
+        self.settings.pop('geometry_report')
+        self.settings.pop('geometry_about')
+        self.settings.pop('geometry_unarchive')
+        self.settings.pop('geometry_viewer')
+        config_save(self.settings)
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
 
@@ -803,7 +798,7 @@ class WinMain(tk.Tk):
     def event_cmb_theme_select(self, event):
         self.theme = self.known_themes[self.cmb_theme.current()]
         self.style.theme_use(self.theme)
-        self.config_gui['theme'] = self.theme
+        self.settings['theme'] = self.theme
 
     def find_func_by_name(self, name):
         """ Find a WinMain method by name, or the start/end of a name.
@@ -838,9 +833,12 @@ class WinMain(tk.Tk):
         self.win_report = WinReport(  # noqa
             self,
             title_msg=reportmsg,
-            config_gui={
-                'geometry_report': self.config_gui['geometry_report'],
+            settings={
+                'geometry_report': self.settings['geometry_report'],
             },
+            destroy_cb=lambda: self.report_closed(
+                allow_auto_exit=allow_auto_exit,
+            ),
             parent_files=[trim_file_path(s) for s in parent_files],
             error_files=[
                 (trim_file_path(s), m) for s, m in error_files
@@ -848,9 +846,6 @@ class WinMain(tk.Tk):
             success_files=[trim_file_path(s) for s in success_files],
             parent_name=parent_name,
             success_name=success_name,
-            destroy_cb=lambda: self.report_closed(
-                allow_auto_exit=allow_auto_exit,
-            ),
         )
 
     def validate_dirs(self, ignore_dirs=None):
@@ -881,8 +876,11 @@ def list_funcs():
 
 
 def load_gui(**kwargs):
-    win = WinMain(**kwargs)  # noqa
+    tiger_files = kwargs.pop('tiger_files')
     debug('Starting main window...')
+    win = WinMain(**kwargs)  # noqa
+    if tiger_files:
+        win.after_idle(win.cmd_menu_viewer, tiger_files)
     try:
         lock_acquire()
     except ValueError:

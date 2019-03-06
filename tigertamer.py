@@ -66,7 +66,7 @@ USAGESTR = """{versionstr}
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
-        {script} -V FILE... [-D]
+        {script} [-g] -V FILE... [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
                  [-n] [-s] [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
@@ -74,7 +74,8 @@ USAGESTR = """{versionstr}
 
     Options:
         ARCHIVE_DIR           : Directory to look for archive files.
-        FILE                  : One or more CSV (.dat) files to parse.
+        FILE                  : One or more CSV (.dat) files to parse,
+                                or Tiger (.tiger) files to view with -V.
         -a dir,--archive dir  : Directory for completed master files.
                                 Use - to disable archiving.
                                 Disabled when printing to stdout.
@@ -109,7 +110,11 @@ def main(argd):
     set_debug_mode(argd['--debug'])
     debug('Debugging enabled.')
 
-    inpaths = argd['FILE'] or config.get('dat_dir', None)
+    inpaths = argd['FILE'] or config.get('dat_dir', [])
+    if all(s.lower().endswith('.tiger') for s in inpaths):
+        # If all input files are tiger files, --view is implicit.
+        argd['--view'] = True
+
     outdir = (
         argd['--output'] or config.get('tiger_dir', './tigertamer_output')
     )
@@ -151,6 +156,7 @@ def main(argd):
             ignore_dirs=tuple(ignore_dirs),
             ignore_strs=tuple(ignore_strs),
             run_function=argd['--func'],
+            tiger_files=argd['FILE'] if argd['--view'] else None,
         )
 
     # Console mode, need a lock.

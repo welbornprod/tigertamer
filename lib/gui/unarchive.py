@@ -26,28 +26,31 @@ from .common import (
     trim_file_path,
     ttk,
     validate_dirs,
+    WinToplevelBase,
 )
 from .report import WinReport
 
 
-class WinUnarchive(tk.Toplevel):
-    def __init__(self, *args, **kwargs):
-        try:
-            self.config_gui = kwargs.pop('config_gui')
-            self.destroy_cb = kwargs.pop('destroy_cb')
-            self.report_cb = kwargs.pop('report_cb')
-            self.arch_dir = kwargs.pop('arch_dir')
-            self.dat_dir = kwargs.pop('dat_dir')
-        except KeyError as ex:
-            raise TypeError('Missing required kwarg: {}'.format(ex))
+class WinUnarchive(WinToplevelBase):
+    def __init__(
+            self, *args,
+            settings, destroy_cb, report_cb, arch_dir, dat_dir,
+            **kwargs):
 
+        self.settings = settings
+        self.destroy_cb = destroy_cb
+        self.report_cb = report_cb
+        self.arch_dir = arch_dir
+        self.dat_dir = dat_dir
         super().__init__(*args, **kwargs)
+        self.debug_settings()
+
         # Make a topmost window, because the main window can't be used
         # right now anyway.
         self.attributes('-topmost', 1)
 
         self.title('{} - Unarchive'.format(NAME))
-        self.geometry(self.config_gui.get('geometry_unarchive', '731x163'))
+        self.geometry(self.settings.get('geometry_unarchive', '731x163'))
 
         # Hotkey info.
         hotkeys = {
@@ -281,10 +284,10 @@ class WinUnarchive(tk.Toplevel):
     def destroy(self):
         """ Handle this unarchive window being destroyed. """
         debug('Saving unarchive-gui config...')
-        self.config_gui['geometry_unarchive'] = self.geometry()
-        config_save(self.config_gui)
+        self.settings['geometry_unarchive'] = self.geometry()
+        config_save(self.settings)
         debug('Closing unarchive window (geometry={!r}).'.format(
-            self.config_gui['geometry_unarchive']
+            self.settings['geometry_unarchive']
         ))
         # Remove topmost, and hide this window, in case any callbacks want
         # to show a dialog.
@@ -325,9 +328,10 @@ class WinUnarchive(tk.Toplevel):
         self.win_report = WinReport(  # noqa
             self,
             title_msg=reportmsg,
-            config_gui={
-                'geometry_report': self.config_gui['geometry_report'],
+            settings={
+                'geometry_report': self.settings['geometry_report'],
             },
+            destroy_cb=destroy_cb,
             parent_files=[trim_file_path(s) for s in parent_files],
             error_files=[
                 (trim_file_path(s), m) for s, m in error_files
@@ -335,7 +339,6 @@ class WinUnarchive(tk.Toplevel):
             success_files=[trim_file_path(s) for s in success_files],
             parent_name='Archive',
             success_name='Restored',
-            destroy_cb=destroy_cb,
         )
 
     def validate_dirs(self):

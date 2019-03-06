@@ -14,52 +14,43 @@ from .common import (
     show_question,
     tk,
     ttk,
+    WinToplevelBase,
 )
 
 from ..util.config import (
-    AUTHOR,
-    ICONFILE,
     NAME,
-    VERSION,
     config_save,
-    get_system_info,
 )
 from ..util.format import (
     TigerFile,
 )
 from ..util.logger import (
     debug,
-    debug_err,
-    debug_obj,
 )
 from ..util.parser import (
     MozaikMasterFile,
 )
 
 
-class WinViewer(tk.Toplevel):
-    def __init__(self, *args, **kwargs):
-        # Don't send kwargs to Toplevel().
-        try:
-            self.config_gui = kwargs.pop('config_gui')
-            self.destroy_cb = kwargs.pop('destroy_cb')
-            self.dat_dir = kwargs.pop('dat_dir')
-            self.tiger_dir = kwargs.pop('tiger_dir')
-        except KeyError as ex:
-            raise TypeError('Missing required kwarg: {}'.format(ex))
-        try:
-            # Required, but may be None values.
-            self.filenames = kwargs.pop('filenames') or []
-        except KeyError as ex:
-            raise TypeError('Missing required kwarg, may be None: {}'.format(
-                ex
-            ))
+class WinViewer(WinToplevelBase):
+    def __init__(
+            self, *args,
+            settings, destroy_cb, dat_dir, tiger_dir,
+            filenames=None,
+            **kwargs):
+        self.settings = settings
+        self.destroy_cb = destroy_cb
+        self.dat_dir = dat_dir
+        self.tiger_dir = tiger_dir
+        # The `filenames` arg is handled at the end of __init__.
+        self.filenames = []
         super().__init__(*args, **kwargs)
+        self.debug_settings()
 
         # Initialize this window.
         self.default_title = '{} - Viewer'.format(NAME)
         self.title(self.default_title)
-        self.geometry(self.config_gui.get('geometry_viewer', '554x141'))
+        self.geometry(self.settings.get('geometry_viewer', '554x141'))
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Hotkey and Menu information for this window, programmatically setup.
@@ -251,11 +242,11 @@ class WinViewer(tk.Toplevel):
                 '<Control-{}>'.format(btninfo['char'].lower()),
                 create_event_handler(btninfo['func']),
             )
+        # Build default tab.
+        self.build_tab()
         # Open file passed in with kwargs?
-        if self.filenames:
-            self.view_files(self.filenames)
-        else:
-            self.build_tab()
+        if filenames:
+            self.after_idle(self.cmd_btn_open, filenames)
 
     def build_tab(self, filename=None):
         frm_view = ttk.Frame(
@@ -372,9 +363,9 @@ class WinViewer(tk.Toplevel):
     def cmd_btn_exit(self):
         return self.destroy()
 
-    def cmd_btn_open(self):
+    def cmd_btn_open(self, filenames=None):
         """ Pick a file with a Tk file dialog, and open it. """
-        filenames = self.dialog_files(
+        filenames = filenames or self.dialog_files(
             initialdir=self.tiger_dir,
             filetypes=(('Tiger Files', '*.tiger'), ),
         )
@@ -427,10 +418,10 @@ class WinViewer(tk.Toplevel):
 
     def destroy(self):
         debug('Saving gui-viewer config...')
-        self.config_gui['geometry_viewer'] = self.geometry()
-        config_save(self.config_gui)
+        self.settings['geometry_viewer'] = self.geometry()
+        config_save(self.settings)
         debug('Closing viewer window (geometry={!r}).'.format(
-            self.config_gui['geometry_viewer']
+            self.settings['geometry_viewer']
         ))
         self.attributes('-topmost', 0)
         self.withdraw()

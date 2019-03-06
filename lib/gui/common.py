@@ -11,15 +11,25 @@ from tkinter import ttk  # noqa (stored here for cleaner API)
 from tkinter import filedialog  # noqa
 from tkinter import messagebox
 
+from colr import (
+    auto_disable as colr_auto_disable,
+    Colr as C,
+)
+
 from ..util.logger import (
     debug,
+    debugprinter,
     debug_exc,
+    debug_obj,
     print_err,
 )
 from ..util.config import (
     NAME,
     lock_release,
 )
+
+
+colr_auto_disable()
 
 
 def create_event_handler(func):
@@ -147,6 +157,21 @@ def validate_dirs(dat_dir='', tiger_dir='', arch_dir='', ignore_dirs=None):
     return True
 
 
+class _NotSet(object):
+    def __bool__(self):
+        return False
+
+    def __colr__(self):
+        return C('Not Set', 'red').join('<', '>', fore='dimgrey')
+
+    def __str__(self):
+        return '<Not Set>'
+
+
+# Singleton instance for a None value that is not None.
+NotSet = _NotSet()
+
+
 class TkErrorLogger(object):
     """ Wrapper for tk calls, to log error messages. """
     def __init__(self, func, subst, widget):
@@ -170,6 +195,48 @@ class TkErrorLogger(object):
                 message=str(ex),
             )
             raise
+
+
+class WinToplevelBase(tk.Toplevel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def debug_attr(self, attr, default=NotSet, level=0):
+        if not debugprinter.enabled:
+            return
+        val = getattr(self, attr, default)
+        debug_obj(
+            val,
+            msg='{}.{}:'.format(type(self).__name__, attr),
+            parent=self,
+            level=level + 1,
+        )
+
+    def debug_init(self, level=0):
+        """ Print args/kwargs passed into init, if set as attributes. """
+        if not debugprinter.enabled:
+            return
+        names = (
+            s
+            for s in self.__init__.__func__.__code__.co_varnames
+            if s not in ('self', 'args', 'kwargs')
+        )
+        obj = {}
+        for name in names:
+            val = getattr(self, name, NotSet)
+            if val is NotSet:
+                continue
+            obj[name] = repr(val)
+        debug_obj(
+            obj,
+            msg='{}.__init__ vars:'.format(type(self).__name__),
+            parent=self,
+            level=level + 1,
+        )
+
+    def debug_settings(self, level=0):
+        """ Shortcut for self.debug_attr('settings'). """
+        return self.debug_attr('settings', level=level + 1)
 
 
 # Use TkErrorLogger

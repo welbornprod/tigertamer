@@ -11,6 +11,7 @@ from .common import (
     handle_cb,
     tk,
     ttk,
+    WinToplevelBase,
 )
 
 from ..util.config import (
@@ -75,19 +76,20 @@ def humantime_fromsecs(secs, float_fmt='0.2f'):
     return '{:.0f} {}, {:.0f} {}'.format(days, daystr, hours, hourstr)
 
 
-class WinAbout(tk.Toplevel):
-    def __init__(self, *args, **kwargs):
+class WinAbout(WinToplevelBase):
+    def __init__(
+            self, *args,
+            settings, destroy_cb,
+            **kwargs):
+        self.settings = settings
+        self.destroy_cb = destroy_cb
+
         # Don't send kwargs to Toplevel().
-        try:
-            self.config_gui = kwargs.pop('config_gui')
-            self.destroy_cb = kwargs.pop('destroy_cb')
-        except KeyError as ex:
-            raise TypeError('Missing required kwarg: {}'.format(ex))
         super().__init__(*args, **kwargs)
 
         # Initialize this window.
         self.title('{} - About'.format(NAME))
-        self.geometry(self.config_gui.get('geometry_about', '442x246'))
+        self.geometry(self.settings.get('geometry_about', '442x246'))
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Make the main frame expand.
@@ -251,10 +253,10 @@ class WinAbout(tk.Toplevel):
 
     def destroy(self):
         debug('Saving gui-about config...')
-        self.config_gui['geometry_about'] = self.geometry()
-        config_save(self.config_gui)
+        self.settings['geometry_about'] = self.geometry()
+        config_save(self.settings)
         debug('Closing about window (geometry={!r}).'.format(
-            self.config_gui['geometry_about']
+            self.settings['geometry_about']
         ))
         self.attributes('-topmost', 0)
         self.withdraw()

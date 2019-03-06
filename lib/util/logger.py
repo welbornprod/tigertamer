@@ -150,12 +150,12 @@ def debug_exc(msg=None, suppress=None, suppress_strs=None):
         )
 
 
-def debug_obj(o, msg=None, is_error=False):
+def debug_obj(o, msg=None, is_error=False, parent=None, level=0):
     """ Pretty print an object, using JSON. """
     alignfirst = False
     debugfunc = debug_err if is_error else debug
     if msg:
-        debugfunc(msg, level=1)
+        debugfunc(msg, parent=parent, level=level + 1)
         alignfirst = True
 
     try:
@@ -174,7 +174,12 @@ def debug_obj(o, msg=None, is_error=False):
             lines = [repr(o)]
 
     for i, s in enumerate(lines):
-        debugfunc(s, level=1, align=(i > 0) or alignfirst)
+        debugfunc(
+            s,
+            parent=parent,
+            level=level + 1,
+            align=(i > 0) or alignfirst,
+        )
 
 
 def fix_log_msg(*args, **kwargs):

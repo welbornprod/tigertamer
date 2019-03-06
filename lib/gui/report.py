@@ -4,9 +4,6 @@
     Report window for Tiger Tamer GUI.
     -Christopher Welborn 01-05-2019
 """
-
-from contextlib import suppress
-
 from ..util.config import (
     NAME,
     config_save,
@@ -17,32 +14,32 @@ from .common import (
     handle_cb,
     tk,
     ttk,
+    WinToplevelBase,
 )
 
 
-class WinReport(tk.Toplevel):
-    def __init__(self, *args, **kwargs):
-        try:
-            self.config_gui = kwargs.pop('config_gui')
-            self.destroy_cb = kwargs.pop('destroy_cb')
-            self.title_msg = kwargs.pop('title_msg')
-            # List of 'master files'
-            self.parent_files = kwargs.pop('parent_files')
-            # List of (tigerpath, 'message')
-            self.error_files = kwargs.pop('error_files')
-            # List of (tigerpath, )
-            self.success_files = kwargs.pop('success_files')
-        except KeyError as ex:
-            raise TypeError('Missing required kwarg: {}'.format(ex))
+class WinReport(WinToplevelBase):
+    def __init__(
+            self, *args,
+            settings, destroy_cb, title_msg,
+            parent_files, error_files, success_files,
+            parent_name=None, success_name=None,
+            **kwargs):
+        self.settings = settings
+        self.destroy_cb = destroy_cb
+        self.title_msg = title_msg
+        # List of 'master files'
+        self.parent_files = parent_files
+        # List of (tigerpath, 'message')
+        self.error_files = error_files
+        # List of (tigerpath, )
+        self.success_files = success_files
 
-        self.parent_name = kwargs.get('parent_name', 'Master')
-        with suppress(KeyError):
-            kwargs.pop('parent_name')
-        self.success_name = kwargs.get('success_name', 'Tiger')
-        with suppress(KeyError):
-            kwargs.pop('success_name')
+        self.parent_name = parent_name or 'Master'
+        self.success_name = success_name or 'Tiger'
 
         super().__init__(*args, **kwargs)
+        self.debug_settings()
 
         # Report window should stay above the main window.
         self.attributes('-topmost', 1)
@@ -52,7 +49,7 @@ class WinReport(tk.Toplevel):
         self.success_len = len(self.success_files)
 
         self.title('{} - {}'.format(NAME, self.title_msg))
-        self.geometry(self.config_gui.get('geometry_report', '331x301'))
+        self.geometry(self.settings.get('geometry_report', '331x301'))
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
         self.frm_main.pack(fill=tk.BOTH, expand=True)
 
@@ -225,12 +222,12 @@ class WinReport(tk.Toplevel):
 
     def destroy(self):
         debug('Saving gui-report config...')
-        self.config_gui['geometry_report'] = self.geometry()
-        config_save(self.config_gui)
+        self.settings['geometry_report'] = self.geometry()
+        config_save(self.settings)
         # Remove topmost, and hide this report, in case any callbacks want
         # to show a dialog.
         debug('Closing report window (geometry={!r}).'.format(
-            self.config_gui['geometry_report'],
+            self.settings['geometry_report'],
         ))
         self.attributes('-topmost', 0)
         self.withdraw()
