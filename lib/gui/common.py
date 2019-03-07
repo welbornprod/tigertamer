@@ -11,11 +11,6 @@ from tkinter import ttk  # noqa (stored here for cleaner API)
 from tkinter import filedialog  # noqa
 from tkinter import messagebox
 
-from colr import (
-    auto_disable as colr_auto_disable,
-    Colr as C,
-)
-
 from ..util.logger import (
     debug,
     debugprinter,
@@ -25,11 +20,8 @@ from ..util.logger import (
 )
 from ..util.config import (
     NAME,
-    lock_release,
+    NotSet,
 )
-
-
-colr_auto_disable()
 
 
 def create_event_handler(func):
@@ -155,21 +147,6 @@ def validate_dirs(dat_dir='', tiger_dir='', arch_dir='', ignore_dirs=None):
         show_error(msg)
         return False
     return True
-
-
-class _NotSet(object):
-    def __bool__(self):
-        return False
-
-    def __colr__(self):
-        return C('Not Set', 'red').join('<', '>', fore='dimgrey')
-
-    def __str__(self):
-        return '<Not Set>'
-
-
-# Singleton instance for a None value that is not None.
-NotSet = _NotSet()
 
 
 class TkErrorLogger(object):

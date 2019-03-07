@@ -16,7 +16,7 @@ from colr import (
     Colr as C,
 )
 
-from .config import config
+from .config import config_get
 
 colr_auto_disable()
 
@@ -28,51 +28,51 @@ E = ElementMaker(
 )
 
 settings = {
-        'style': config.get(
+        'style': config_get(
             'style',
             'Setpoint'
         ),
-        'unit': config.get(
+        'unit': config_get(
             'unit',
             'English'
         ),
-        'isOptimized': config.get(
+        'isOptimized': config_get(
             'isOptimized',
             'true'
         ),
-        'headCut': config.get(
+        'headCut': config_get(
             'headCut',
             '0'
         ),
-        'tailCut': config.get(
+        'tailCut': config_get(
             'tailCut',
             '0'
         ),
-        'patternStockLength': config.get(
+        'patternStockLength': config_get(
             'patternStockLength',
             '0'
         ),
-        'sequenceNumber': config.get(
+        'sequenceNumber': config_get(
             'sequenceNumber',
             '1'
         ),
-        'sortString': config.get(
+        'sortString': config_get(
             'sortString',
             None
         ),
-        'sendFileName': config.get(
+        'sendFileName': config_get(
             'sendFileName',
             'true'
         ),
-        'quantityMultiples': config.get(
+        'quantityMultiples': config_get(
             'quantityMultiples',
             'false'
         ),
-        'isInfinite': config.get(
+        'isInfinite': config_get(
             'isInfinite',
             'false'
         ),
-        'isCascade': config.get(
+        'isCascade': config_get(
             'isCascade',
             'false'
         ),

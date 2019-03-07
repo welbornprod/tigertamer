@@ -21,7 +21,7 @@ from colr import (
 
 from lib.util.config import (
     AUTHOR,
-    config,
+    config_get,
     config_increment,
     lock_acquire,
     lock_release,
@@ -62,7 +62,7 @@ USAGESTR = """{versionstr}
     use with the TigerTouch software.
 
     Usage:
-        {script} -F | -h | -v
+        {script} -F | -h | -v [-D]
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
@@ -106,26 +106,29 @@ USAGESTR = """{versionstr}
 
 
 def main(argd):
-    """ Main entry point, expects docopt arg dict as argd. """
+    """ Main entry point, parses arguments and dispatches accordingly.
+        Arguments:
+            argd  : Docopt arg dict.
+    """
     set_debug_mode(argd['--debug'])
     debug('Debugging enabled.')
 
-    inpaths = argd['FILE'] or config.get('dat_dir', [])
+    inpaths = argd['FILE'] or config_get('dat_dir', [])
     if all(s.lower().endswith('.tiger') for s in inpaths):
         # If all input files are tiger files, --view is implicit.
         argd['--view'] = True
 
     outdir = (
-        argd['--output'] or config.get('tiger_dir', './tigertamer_output')
+        argd['--output'] or config_get('tiger_dir', './tigertamer_output')
     )
     archdir = (
         argd['--archive'] or
-        config.get('archive_dir', './tigertamer_archive') or
+        config_get('archive_dir', './tigertamer_archive') or
         argd['ARCHIVE_DIR']  # Only valid with -u or -U.
     )
-    ignore_dirs = set(config.get('ignore_dirs', []))
+    ignore_dirs = set(config_get('ignore_dirs', []))
     ignore_dirs.update(set(argd['--ignore']))
-    ignore_strs = set(config.get('ignore_strs', []))
+    ignore_strs = set(config_get('ignore_strs', []))
     ignore_strs.update(set(argd['--IGNORE']))
 
     if outdir and (outdir != '-'):
@@ -134,22 +137,22 @@ def main(argd):
         ignore_dirs.add(archdir)
 
     # Handle config/arg flags.
-    argd['--extra'] = config.get('extra_data', argd['--extra'])
-    argd['--nosplit'] = config.get('no_part_split', argd['--nosplit'])
+    argd['--extra'] = config_get('extra_data', argd['--extra'])
+    argd['--nosplit'] = config_get('no_part_split', argd['--nosplit'])
 
     if argd['--gui'] or argd['--func']:
         # The GUI handles arguments differently, send it the correct config.
         return load_gui(
-            auto_exit=config.get('auto_exit', False),
+            auto_exit=config_get('auto_exit', False),
             auto_run=argd['--run'],
             extra_data=argd['--extra'],
             no_part_split=argd['--nosplit'],
-            geometry=config.get('geometry', ''),
-            geometry_about=config.get('geometry_about', ''),
-            geometry_report=config.get('geometry_report', ''),
-            geometry_unarchive=config.get('geometry_unarchive', ''),
-            geometry_viewer=config.get('geometry_viewer', ''),
-            theme=config.get('theme', ''),
+            geometry=config_get('geometry', ''),
+            geometry_about=config_get('geometry_about', ''),
+            geometry_report=config_get('geometry_report', ''),
+            geometry_unarchive=config_get('geometry_unarchive', ''),
+            geometry_viewer=config_get('geometry_viewer', ''),
+            theme=config_get('theme', ''),
             archive_dir='' if archdir in (None, '-') else archdir,
             dat_dir=inpaths[0] if inpaths else '',
             tiger_dir='' if outdir in (None, '-') else outdir,
@@ -374,9 +377,16 @@ class InvalidConfig(InvalidArg):
         return 'Invalid config!'
 
 
-def entry_point():
+def entry_point(argv=None):
+    """ Actual entry point for execution, wrapped in a function for testing.
+    """
     try:
-        mainret = main(docopt(USAGESTR, version=VERSIONSTR, script=SCRIPT))
+        mainret = main(docopt(
+            USAGESTR,
+            argv=argv or sys.argv[1:],
+            version=VERSIONSTR,
+            script=SCRIPT,
+        ))
     except InvalidArg as ex:
         print_err(ex)
         mainret = 1

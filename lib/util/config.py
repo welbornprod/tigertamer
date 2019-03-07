@@ -9,15 +9,23 @@ import os
 import sys
 from platform import platform
 
+from colr import (
+    auto_disable as colr_auto_disable,
+    Colr as C,
+)
 from easysettings import JSONSettings
 
 from .logger import (
     debug,
     debug_err,
+    debugprinter,
 )
 
+colr_auto_disable()
+debugprinter.enable(('-D' in sys.argv) or ('--debug' in sys.argv))
+
 NAME = 'Tiger Tamer'
-VERSION = '0.2.4'
+VERSION = '0.2.5'
 AUTHOR = 'Christopher Joseph Welborn'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
@@ -34,17 +42,41 @@ ICONFILE = os.path.join(
 # pid used for checking the file lock.
 PID = os.getpid()
 
-# Something besides None, to mean No Value.
-Nothing = object()
+
+# Global JSONSettings() config object, available to other modules.
+config = None
 
 
-try:
-    config = JSONSettings.from_file(CONFIGFILE)
-    debug('Loaded config from: {}'.format(CONFIGFILE))
-except FileNotFoundError:
-    config = JSONSettings()
-    config.filename = CONFIGFILE
-    debug('No config file, starting fresh: {}'.format(CONFIGFILE))
+class _NotSet(object):
+    def __bool__(self):
+        return False
+
+    def __colr__(self):
+        return C('Not Set', 'red').join('<', '>', fore='dimgrey')
+
+    def __str__(self):
+        return '<Not Set>'
+
+
+# Singleton instance for a None value that is not None.
+NotSet = _NotSet()
+
+
+def config_get(key, default=NotSet):
+    """ Like config.get(), except it will load config if it hasn't been
+        loaded yet.
+    """
+    global config
+    if config is None:
+        debug('Called config_get() before config was loaded.', level=1)
+        config = config_load()
+    try:
+        val = config.get(key)
+    except KeyError:
+        if default is NotSet:
+            raise
+        return default
+    return val
 
 
 def config_increment(**kwargs):
@@ -54,13 +86,13 @@ def config_increment(**kwargs):
         A `default` key can be given, for default values.
     """
     global config
-    default = kwargs.get('default', Nothing)
-    if default is not Nothing:
+    default = kwargs.get('default', NotSet)
+    if default is not NotSet:
         kwargs.pop('default')
 
     for key, value in kwargs.items():
-        v = config.get(key, default)
-        if v is Nothing:
+        v = config_get(key, default)
+        if v is NotSet:
             debug_err('Tried to increment invalid config key: {}'.format(key))
             return False
         if value == 0:
@@ -69,9 +101,7 @@ def config_increment(**kwargs):
         debug(
             'Incrementing: {k!r:>16} =  {v!r} + {newv!r}'.format(
                 k=key,
-                v=v or '(default: {})'.format(
-                    'Nothing' if default is Nothing else default
-                ),
+                v=v or '(default: {})'.format(default),
                 newv=value,
             )
         )
@@ -101,13 +131,14 @@ def config_increment(**kwargs):
 
 def config_load():
     """ Reload config from disk. """
+    loadtype = 'load' if config is None else 'reload'
     try:
         c = JSONSettings.from_file(CONFIGFILE)
-        debug('Config reloaded from: {}'.format(CONFIGFILE))
+        debug('Config {}ed from: {}'.format(loadtype, CONFIGFILE))
     except FileNotFoundError:
         c = JSONSettings()
         c.filename = CONFIGFILE
-        debug('No config to reload: {}'.format(CONFIGFILE))
+        debug('No config to {}: {}'.format(loadtype, CONFIGFILE))
     return c
 
 
@@ -140,13 +171,13 @@ def get_system_info():
     return {
         'platform': platform(),
         'python_ver': '.'.join(str(i) for i in sys.version_info[0:3]),
-        'runs': config.get('runs', 1),
-        'runtime_secs': config.get('runtime_secs', 1),
-        'master_files': config.get('master_files', 0),
-        'tiger_files': config.get('tiger_files', 0),
-        'archive_files': config.get('archive_files', 0),
-        'unarchive_files': config.get('unarchive_files', 0),
-        'remove_files': config.get('remove_files', 0),
+        'runs': config_get('runs', 1),
+        'runtime_secs': config_get('runtime_secs', 1),
+        'master_files': config_get('master_files', 0),
+        'tiger_files': config_get('tiger_files', 0),
+        'archive_files': config_get('archive_files', 0),
+        'unarchive_files': config_get('unarchive_files', 0),
+        'remove_files': config_get('remove_files', 0),
     }
 
 

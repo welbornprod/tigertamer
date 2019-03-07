@@ -12,25 +12,14 @@ import unittest
 
 from colr import Colr as C
 
+from ..lib.util.config import (
+    NotSet,
+)
 from ..lib.util.parser import (
     MozaikMasterFile,
 )
 
 from ..test import data
-
-
-class _NotSet(object):
-    def __bool__(self):
-        return False
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __repr__(self):
-        return '<Not Set>'
-
-
-NotSet = _NotSet()
 
 
 def part_compare_fmt(a, b, mark_keys=None):
