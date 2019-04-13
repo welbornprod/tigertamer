@@ -92,6 +92,12 @@ settings = {
     ),
 }
 
+# Labels that are available to be used, in the correct order for use with
+# TigerFile columns.
+# TigerFile columns also have a 'Quantity', 'Completed', and 'Length' that
+# are not used for labels.
+available_labels = ('index', 'part', 'no', 'note')
+
 
 def create_xml(mozfile, extra_data=False):
     return '\n'.join((
@@ -109,24 +115,16 @@ def create_xml(mozfile, extra_data=False):
 
 
 def create_labels():
-    available = ['index', 'part', 'no', 'note']
-    labels = settings.get('labels', [])
-    if labels:
-        debug('Using labels from config.')
-    else:
-        debug('Using default labels.')
-        labels = default_labels()
-        debug(repr(labels), align=True)
     # Generate LabelField items programmatically.
     return [
         E.LabelField(
             E.header(name.title()),
-            E.fontSize(str(lblinfo.get('fontsize', '12'))),
-            E.x(str(lblinfo.get('x', '50'))),
-            E.y(str(lblinfo.get('y', available.index(name) * 30))),
-            E.column(str(available.index(name))),
+            E.fontSize(str(lblinfo.get('fontsize', 12))),
+            E.x(str(lblinfo.get('x', 50))),
+            E.y(str(lblinfo.get('y', available_labels.index(name) * 30))),
+            E.column(str(available_labels.index(name))),
         )
-        for name, lblinfo in labels
+        for name, lblinfo in get_label_config()
     ]
 
 
@@ -191,6 +189,41 @@ def default_labels():
         ('no', {'fontsize': 24, 'x': 50, 'y': 60}),
         ('note', {'fontsize': 12, 'x': 50, 'y': 90}),
     )
+
+
+def get_label_config(use_display_order=True):
+    """ Build label info, either from user config or default_labels.
+        Ensures that values are stringified.
+    """
+    labels = settings.get('labels', [])
+    if labels:
+        debug('Using labels from config.')
+    else:
+        debug('Using default labels.')
+        labels = default_labels()
+    if use_display_order:
+        # Sort by y value (the order they are displayed on paper).
+        labels = sorted(
+            labels,
+            key=lambda t: t[1]['y']
+        )
+    return tuple(
+        (name, {k: str(v) for k, v in lblinfo.items()})
+        for name, lblinfo in labels
+    )
+
+
+def list_labelconfig(use_display_order=True):
+    """ Print label config to the console and return an exit status. """
+    labels = get_label_config(use_display_order=use_display_order)
+    for name, lblinfo in labels:
+        print('{}:'.format(C(name, 'blue', style='bright')))
+        for k, v in lblinfo.items():
+            print('    {:>8}: {}'.format(
+                C(k, 'blue'),
+                C(v, 'cyan'),
+            ))
+    return 0
 
 
 class TigerFile(object):

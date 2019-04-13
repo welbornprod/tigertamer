@@ -30,6 +30,7 @@ from lib.util.config import (
 )
 from lib.util.format import (
     TigerFile,
+    list_labelconfig,
 )
 from lib.util.logger import (
     debug,
@@ -63,7 +64,7 @@ USAGESTR = """{versionstr}
     use with the TigerTouch software.
 
     Usage:
-        {script} -F | -h | -v [-D]
+        {script} -F | -h | -L | -v [-D]
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
@@ -92,6 +93,7 @@ USAGESTR = """{versionstr}
                                 for mozaik files.
                                 The output and archive directories are
                                 included automatically.
+        -L,--labelconfig      : Print label config and exit.
         -o dir,--output dir   : Output directory.
                                 Use - for stdout output.
         -h,--help             : Show this help message.
@@ -177,6 +179,10 @@ def main(argd):
     if argd['--functions']:
         # List functions available for -f.
         return list_funcs()
+
+    if argd['--labelconfig']:
+        # List label config being used.
+        return list_labelconfig()
 
     if argd['--preview']:
         # Preview a .dat file as a .tiger file.
