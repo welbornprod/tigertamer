@@ -6,6 +6,7 @@
 """
 
 import os
+import sys
 
 from lxml.builder import ElementMaker
 from lxml import etree as ElementTree
@@ -16,9 +17,17 @@ from colr import (
     Colr as C,
 )
 
-from .config import config_get
+from .config import (
+    config_get,
+)
+
+from .logger import (
+    debug,
+    debugprinter,
+)
 
 colr_auto_disable()
+debugprinter.enable(('-D' in sys.argv) or ('--debug' in sys.argv))
 
 E = ElementMaker(
     nsmap={
@@ -27,55 +36,60 @@ E = ElementMaker(
     }
 )
 
+tigerconfig = config_get('tiger_settings', {})
 settings = {
-        'style': config_get(
-            'style',
-            'Setpoint'
-        ),
-        'unit': config_get(
-            'unit',
-            'English'
-        ),
-        'isOptimized': config_get(
-            'isOptimized',
-            'true'
-        ),
-        'headCut': config_get(
-            'headCut',
-            '0'
-        ),
-        'tailCut': config_get(
-            'tailCut',
-            '0'
-        ),
-        'patternStockLength': config_get(
-            'patternStockLength',
-            '0'
-        ),
-        'sequenceNumber': config_get(
-            'sequenceNumber',
-            '1'
-        ),
-        'sortString': config_get(
-            'sortString',
-            None
-        ),
-        'sendFileName': config_get(
-            'sendFileName',
-            'true'
-        ),
-        'quantityMultiples': config_get(
-            'quantityMultiples',
-            'false'
-        ),
-        'isInfinite': config_get(
-            'isInfinite',
-            'false'
-        ),
-        'isCascade': config_get(
-            'isCascade',
-            'false'
-        ),
+    'style': tigerconfig.get(
+        'style',
+        'Setpoint'
+    ),
+    'unit': tigerconfig.get(
+        'unit',
+        'English'
+    ),
+    'isOptimized': tigerconfig.get(
+        'isOptimized',
+        'true'
+    ),
+    'headCut': tigerconfig.get(
+        'headCut',
+        '0'
+    ),
+    'tailCut': tigerconfig.get(
+        'tailCut',
+        '0'
+    ),
+    'patternStockLength': tigerconfig.get(
+        'patternStockLength',
+        '0'
+    ),
+    'sequenceNumber': tigerconfig.get(
+        'sequenceNumber',
+        '1'
+    ),
+    'sortString': tigerconfig.get(
+        'sortString',
+        None
+    ),
+    'sendFileName': tigerconfig.get(
+        'sendFileName',
+        'true'
+    ),
+    'quantityMultiples': tigerconfig.get(
+        'quantityMultiples',
+        'false'
+    ),
+    'isInfinite': tigerconfig.get(
+        'isInfinite',
+        'false'
+    ),
+    'isCascade': tigerconfig.get(
+        'isCascade',
+        'false'
+    ),
+    'labels': tigerconfig.get(
+        'labels',
+        [],
+    ),
 }
 
 
@@ -92,6 +106,28 @@ def create_xml(mozfile, extra_data=False):
             pretty_print=True,
         ).decode(),
     ))
+
+
+def create_labels():
+    available = ['index', 'part', 'no', 'note']
+    labels = settings.get('labels', [])
+    if labels:
+        debug('Using labels from config.')
+    else:
+        debug('Using default labels.')
+        labels = default_labels()
+        debug(repr(labels), align=True)
+    # Generate LabelField items programmatically.
+    return [
+        E.LabelField(
+            E.header(name.title()),
+            E.fontSize(str(lblinfo.get('fontsize', '12'))),
+            E.x(str(lblinfo.get('x', '50'))),
+            E.y(str(lblinfo.get('y', available.index(name) * 30))),
+            E.column(str(available.index(name))),
+        )
+        for name, lblinfo in labels
+    ]
 
 
 def create_piece(mozpart, index, extra_data=False):
@@ -122,20 +158,6 @@ def create_pieces(mozparts, extra_data=False):
 
 def create_settings(filename, extra_data=False):
     tigername, _ = os.path.splitext(filename)
-    labels = ['Index', 'Part', 'No']
-    if extra_data:
-        labels.append('Note')
-    # Generate LabelField items programmatically.
-    label_strs = [
-        E.LabelField(
-            E.header(header),
-            E.fontSize('12'),
-            E.x('0'),
-            E.y(str(col * 20)),
-            E.column(str(col)),
-        )
-        for col, header in enumerate(labels)
-    ]
 
     return (
         E.style(settings['style']),
@@ -155,7 +177,19 @@ def create_settings(filename, extra_data=False):
         E.quantityMultiples(settings['quantityMultiples']),
         E.isInfinite(settings['isInfinite']),
         E.isCascade(settings['isCascade']),
-        E.printStrings(*label_strs),
+        E.printStrings(*create_labels()),
+    )
+
+
+def default_labels():
+    """ Build default label info.
+        Returns a tuple of tuples: ((name, {fontsize: ?, x: ?, y: ?}), ..)
+    """
+    return (
+        ('index', {'fontsize': 12, 'x': 50, 'y': 110}),
+        ('part', {'fontsize': 24, 'x': 50, 'y': 30}),
+        ('no', {'fontsize': 24, 'x': 50, 'y': 60}),
+        ('note', {'fontsize': 12, 'x': 50, 'y': 90}),
     )
 
 
@@ -192,11 +226,11 @@ class TigerFile(object):
                 parts=C(self.parts, 'cyan'),
             ))
         return C('\n  '.join((
-                '{typ}(',
-                'filename={fname!r},',
-                'parts=[',
-                '{parts}',
-                ']\n)'
+            '{typ}(',
+            'filename={fname!r},',
+            'parts=[',
+            '{parts}',
+            ']\n)'
         )).format(
             typ=typename,
             filename=filename,
@@ -212,11 +246,11 @@ class TigerFile(object):
                 parts=self.parts,
             )
         return '\n  '.join((
-                '{typ}(',
-                'filename={fname!r},',
-                'parts=[',
-                '{parts}',
-                ']\n)'
+            '{typ}(',
+            'filename={fname!r},',
+            'parts=[',
+            '{parts}',
+            ']\n)'
         )).format(
             typ=typename,
             filename=self.filename,

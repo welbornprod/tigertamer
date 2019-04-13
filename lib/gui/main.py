@@ -26,7 +26,6 @@ from ..util.logger import (
     set_debug_mode,
 )
 from ..util.parser import (
-    get_archive_info,
     get_tiger_files,
     load_moz_files,
     write_tiger_file,
@@ -36,7 +35,6 @@ from .about import WinAbout
 from .common import (
     create_event_handler,
     filedialog,
-    handle_cb,
     show_error,
     show_question,
     tk,
@@ -185,7 +183,7 @@ class WinMain(tk.Tk):
             label='Help',
             menu=self.menu_help,
             underline=0,
-         )
+        )
 
         # Set main menu to root window.
         self.config(menu=self.menu_main)
@@ -705,7 +703,7 @@ class WinMain(tk.Tk):
         """ Handles menu->Unarchive and Remove Tiger Files """
         return self.cmd_menu_unarchive(remove_tiger_files=True)
 
-    def cmd_menu_viewer(self, filenames=None):
+    def cmd_menu_viewer(self, filenames=None, preview_files=None):
         """ Handles menu->Tiger Viewer click. """
         self.enable_interface(False)
         self.win_viewer = WinViewer(
@@ -717,6 +715,7 @@ class WinMain(tk.Tk):
             dat_dir=self.entry_dat.get(),
             tiger_dir=self.entry_tiger.get(),
             filenames=filenames,
+            preview_files=preview_files,
         )
         return True
 
@@ -877,10 +876,13 @@ def list_funcs():
 
 def load_gui(**kwargs):
     tiger_files = kwargs.pop('tiger_files')
+    preview_files = kwargs.pop('preview_files')
     debug('Starting main window...')
     win = WinMain(**kwargs)  # noqa
-    if tiger_files:
-        win.after_idle(win.cmd_menu_viewer, tiger_files)
+    if tiger_files or preview_files:
+        # Schedule a viewing/previewing when ready.
+        win.after_idle(win.cmd_menu_viewer, tiger_files, preview_files)
+
     try:
         lock_acquire()
     except ValueError:

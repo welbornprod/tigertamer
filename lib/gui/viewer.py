@@ -36,7 +36,7 @@ class WinViewer(WinToplevelBase):
     def __init__(
             self, *args,
             settings, destroy_cb, dat_dir, tiger_dir,
-            filenames=None,
+            filenames=None, preview_files=None,
             **kwargs):
         self.settings = settings
         self.destroy_cb = destroy_cb
@@ -247,6 +247,8 @@ class WinViewer(WinToplevelBase):
         # Open file passed in with kwargs?
         if filenames:
             self.after_idle(self.cmd_btn_open, filenames)
+        elif preview_files:
+            self.after_idle(self.preview_files, preview_files)
 
     def build_tab(self, filename=None):
         frm_view = ttk.Frame(
@@ -392,29 +394,7 @@ class WinViewer(WinToplevelBase):
         )
         if not filenames:
             return
-        # Clear all tabs.
-        self.clear_tabs()
-
-        for filename in filenames:
-            if not os.path.exists(filename):
-                self.show_error('File does not exist:\n{}'.format(filename))
-                return
-            st = os.stat(filename)
-            bytesize = st.st_size
-            if bytesize > 4000:
-                msg = '\n'.join((
-                    'File is large:',
-                    filename,
-                    '',
-                    'This may take a minute, continue?'
-                ))
-                if not self.show_question(msg):
-                    return
-        masterfiles = [
-            MozaikMasterFile.from_file(s, split_parts=True)
-            for s in filenames
-        ]
-        return self.view_masterfiles(masterfiles)
+        return self.preview_files(filenames)
 
     def destroy(self):
         debug('Saving gui-viewer config...')
@@ -461,6 +441,36 @@ class WinViewer(WinToplevelBase):
         if column.lower() == 'length':
             value = '{:0.2f}'.format(float(value))
         return str(value)
+
+    def preview_files(self, filenames):
+        """ Preview Mozaik files (.dat), selected with `cmd_btn_preview`, or
+            passed in through `self.__init__(preview_files=..)`.
+        """
+        if not filenames:
+            return
+        # Clear all tabs.
+        self.clear_tabs()
+
+        for filename in filenames:
+            if not os.path.exists(filename):
+                self.show_error('File does not exist:\n{}'.format(filename))
+                return
+            st = os.stat(filename)
+            bytesize = st.st_size
+            if bytesize > 4000:
+                msg = '\n'.join((
+                    'File is large:',
+                    filename,
+                    '',
+                    'This may take a minute, continue?'
+                ))
+                if not self.show_question(msg):
+                    return
+        masterfiles = [
+            MozaikMasterFile.from_file(s, split_parts=True)
+            for s in filenames
+        ]
+        return self.view_masterfiles(masterfiles)
 
     def remove_tab(self, tabid):
         """ Remove a tab and it's associated file name. """

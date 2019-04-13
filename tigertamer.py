@@ -42,6 +42,7 @@ from lib.gui.main import (
     load_gui,
 )
 from lib.util.parser import (
+    MozaikMasterFile,
     create_xml,
     get_archive_info,
     get_tiger_files,
@@ -66,7 +67,7 @@ USAGESTR = """{versionstr}
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
-        {script} [-g] -V FILE... [-D]
+        {script} [-g] (-p | -V) FILE... [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
                  [-n] [-s] [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
@@ -95,12 +96,15 @@ USAGESTR = """{versionstr}
                                 Use - for stdout output.
         -h,--help             : Show this help message.
         -n,--namesonly        : Just show which files would be generated.
+        -p,--preview          : Preview output for a Mozaik (.dat) file.
+                                This will not create any Tiger (.tiger) files.
         -r,--run              : Automatically run with settings in config.
         -s,--nosplit          : Do not split parts into single line items.
         -u,--unarchive        : Undo any archiving, if possible.
         -U,--UNARCHIVE        : Undo any archiving, and remove all output
                                 files.
-        -V,--view             : View a formatted .tiger file in the console.
+        -V,--view             : View a formatted .tiger file in the console,
+                                or with the GUI if -g is also used.
         -v,--version          : Show version.
 """.format(author=AUTHOR, script=SCRIPT, versionstr=VERSIONSTR)
 
@@ -160,6 +164,7 @@ def main(argd):
             ignore_strs=tuple(ignore_strs),
             run_function=argd['--func'],
             tiger_files=argd['FILE'] if argd['--view'] else None,
+            preview_files=argd['FILE'] if argd['--preview'] else None,
         )
 
     # Console mode, need a lock.
@@ -172,6 +177,10 @@ def main(argd):
     if argd['--functions']:
         # List functions available for -f.
         return list_funcs()
+
+    if argd['--preview']:
+        # Preview a .dat file as a .tiger file.
+        return preview_files(argd['FILE'])
 
     if argd['--view']:
         # View a tiger file.
@@ -214,7 +223,7 @@ def main(argd):
             names_only=argd['--namesonly'],
             archive_dir=archdir,
             extra_data=argd['--extra'],
-            )
+        )
 
     parentlen = len(parentfiles)
     status(
@@ -244,6 +253,31 @@ def main(argd):
     return errs
 
 
+def confirm(s, default=False):
+    """ Confirm a yes/no question. """
+    if default:
+        defaultstr = C('/', style='bright').join(
+            C('Y', 'green'),
+            C('n', 'red')
+        )
+    else:
+        defaultstr = C('/', style='bright').join(
+            C('y', 'green'),
+            C('N', 'red')
+        )
+    s = '{} ({}): '.format(C(s, 'cyan'), defaultstr)
+    try:
+        answer = input(s).strip().lower()
+    except EOFError:
+        # Handled at the end of this script.
+        raise
+    if answer:
+        return answer.startswith('y')
+
+    # no answer, return the default.
+    return default
+
+
 def handle_moz_file(
         mozfile, outdir,
         archive_dir=None, names_only=False, extra_data=False):
@@ -268,6 +302,45 @@ def handle_moz_file(
 def options_are_set(*args):
     # Returns True if all args have a value, and the '-' flag wasn't used.
     return all(((s and s != '-') for s in args))
+
+
+def preview_file(filepath):
+    """ Preview a Mozaik file as a Tiger file. """
+    if not os.path.exists(filepath):
+        print_err('File does not exist:\n{}'.format(filepath))
+        return 1
+    st = os.stat(filepath)
+    bytesize = st.st_size
+    if bytesize > 4000:
+        msg = '\n'.join((
+            'File is large:',
+            filepath,
+            '',
+            'This may take a minute, continue?'
+        ))
+        if not confirm(msg):
+            return
+    masterfile = MozaikMasterFile.from_file(filepath, split_parts=True)
+    return preview_masterfile(masterfile)
+
+
+def preview_files(filepaths):
+    """ Preview multiple Mozaik files as Tiger files. """
+    return sum(preview_file(s) for s in filepaths)
+
+
+def preview_masterfile(masterfile):
+    """ Preview a MozaikMasterFile in the console. """
+    return sum(
+        preview_mozfile(mozfile)
+        for mozfile in masterfile.into_width_files()
+    )
+
+
+def preview_mozfile(mozfile):
+    """ Preview a MozaikFile in the console. """
+    tf = TigerFile.from_mozfile(mozfile)
+    return 0 if tf.print() else 1
 
 
 def remove_tiger_files(outdir):
