@@ -64,7 +64,7 @@ USAGESTR = """{versionstr}
     use with the TigerTouch software.
 
     Usage:
-        {script} -F | -h | -L | -v [-D]
+        {script} (-F | -h | -L | -v) [-D]
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
         {script} (-u | -U) [ARCHIVE_DIR] [-D]
