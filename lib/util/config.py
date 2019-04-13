@@ -148,10 +148,11 @@ def config_save(d=None):
     config = config_load()
 
     if d:
-        for val in d.values():
-            if isinstance(val, dict):
+        ok_dicts = ('tiger_settings', )
+        for key, val in d.items():
+            if (key not in ok_dicts) and isinstance(val, dict):
                 debug_err(
-                    'Saving a dict in config!: {!r}'.format(val),
+                    'Saving a dict in config for {!r}!: {!r}'.format(key, val),
                     level=1,
                 )
         config.update(d)

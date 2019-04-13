@@ -46,6 +46,7 @@ def create_event_handler(func):
             func.__name__,
         ))
         return func()
+
     return anon_event_handler
 
 
@@ -160,7 +161,8 @@ class TkErrorLogger(object):
         try:
             if self.subst:
                 args = self.subst(*args)
-            return self.func(*args)
+            if self.func:
+                return self.func(*args)
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception as ex:

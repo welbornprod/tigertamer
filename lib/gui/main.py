@@ -12,7 +12,6 @@ from ..util.config import (
     config_increment,
     config_save,
     lock_acquire,
-    lock_release,
     ICONFILE,
     NAME,
 )
@@ -43,6 +42,7 @@ from .common import (
     validate_dirs,
 )
 
+from .labels import WinLabels
 from .report import WinReport
 from .unarchive import WinUnarchive
 from .viewer import WinViewer
@@ -87,8 +87,10 @@ class WinMain(tk.Tk):
         # Fix message boxes.
         self.option_add('*Dialog.msg.font', 'Arial 10')
 
-        # Singleton instance for the About window (WinAbout.
+        # Singleton instance for the About window (WinAbout).
         self.win_about = None
+        # Singleton instance for the Label Config window (WinLabels).
+        self.win_labels = None
         # A singleton instance for the Report window (WinReport).
         self.win_report = None
         # A singleton instance for the Unarchive window (WinUnarchive).
@@ -110,14 +112,19 @@ class WinMain(tk.Tk):
                     'char': 'T',
                     'func': self.cmd_menu_remove_tiger_files,
                 },
-                # Tiger Viewer is the first item (order: 0)
+                # Label Config is the first item (order: 0)
+                'Label Config': {
+                    'char': 'L',
+                    'func': self.cmd_menu_labels,
+                    'order': 0,
+                },
                 'Tiger Viewer': {
                     'char': 'V',
                     'func': self.cmd_menu_viewer,
-                    'order': 0,
+                    'order': 1,
                 },
-                # Separator under tiger viewer (order: 1).
-                '-': {'order': 1},
+                # Separator under tiger viewer (order: 2).
+                '-': {'order': 2},
                 'Unarchive and Remove Tiger Files': {
                     'char': 'n',
                     'func': self.cmd_menu_unarchive_and_remove,
@@ -472,8 +479,8 @@ class WinMain(tk.Tk):
                 func = getattr(self, name, None)
             if func is None:
                 raise ValueError('Invalid function name: {}}'.format(
-                        name,
-                    ))
+                    name,
+                ))
         if not callable(func):
             raise ValueError('Not callable: {!r}'.format(func))
         debug('Calling function for user: {}()'.format(name))
@@ -558,7 +565,7 @@ class WinMain(tk.Tk):
                     extra_data=self.var_extra_data.get(),
                     error_cb=add_error_file,
                     success_cb=add_success_file,
-                    )
+                )
             except Exception as ex:
                 print_err('Error writing tiger file: {}\n{}'.format(
                     mozfile.filename,
@@ -624,6 +631,18 @@ class WinMain(tk.Tk):
                 allow_auto_exit=False,
             ),
         )
+
+    def cmd_menu_labels(self):
+        """ Handles menu->Label Config click. """
+        self.enable_interface(False)
+        self.win_labels = WinLabels(
+            self,
+            settings={
+                'geometry_labels': self.settings['geometry_labels'],
+            },
+            destroy_cb=lambda: self.enable_interface(True),
+        )
+        return True
 
     def cmd_menu_remove_tiger_files(self):
         """ Handles menu_remove_tiger_files click. """

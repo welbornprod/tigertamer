@@ -19,6 +19,7 @@ from colr import (
 
 from .config import (
     config_get,
+    config_save,
 )
 
 from .logger import (
@@ -124,7 +125,7 @@ def create_labels():
             E.y(str(lblinfo.get('y', available_labels.index(name) * 30))),
             E.column(str(available_labels.index(name))),
         )
-        for name, lblinfo in get_label_config()
+        for name, lblinfo in label_config_get()
     ]
 
 
@@ -191,7 +192,7 @@ def default_labels():
     )
 
 
-def get_label_config(use_display_order=True):
+def label_config_get(use_display_order=False):
     """ Build label info, either from user config or default_labels.
         Ensures that values are stringified.
     """
@@ -213,9 +214,15 @@ def get_label_config(use_display_order=True):
     )
 
 
-def list_labelconfig(use_display_order=True):
+def label_config_save(lbl_config):
+    """ Save label config in the configuration file. """
+    settings['labels'] = lbl_config or {}
+    config_save({'tiger_settings': settings})
+
+
+def list_labelconfig():
     """ Print label config to the console and return an exit status. """
-    labels = get_label_config(use_display_order=use_display_order)
+    labels = label_config_get(use_display_order=True)
     for name, lblinfo in labels:
         print('{}:'.format(C(name, 'blue', style='bright')))
         for k, v in lblinfo.items():

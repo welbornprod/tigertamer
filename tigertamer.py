@@ -155,6 +155,7 @@ def main(argd):
             no_part_split=argd['--nosplit'],
             geometry=config_get('geometry', ''),
             geometry_about=config_get('geometry_about', ''),
+            geometry_labels=config_get('geometry_labels', ''),
             geometry_report=config_get('geometry_report', ''),
             geometry_unarchive=config_get('geometry_unarchive', ''),
             geometry_viewer=config_get('geometry_viewer', ''),
