@@ -337,13 +337,12 @@ def preview_file(filepath):
     bytesize = st.st_size
     if bytesize > 4000:
         msg = '\n'.join((
-            'File is large:',
-            filepath,
+            'File is large: {}'.format(filepath),
             '',
             'This may take a minute, continue?'
         ))
         if not confirm(msg):
-            return
+            return 1
     masterfile = MozaikMasterFile.from_file(filepath, split_parts=True)
     return preview_masterfile(masterfile)
 
@@ -353,6 +352,12 @@ def preview_files(filepaths):
     return sum(preview_file(s) for s in filepaths)
 
 
+# TODO: Move the quick conversions from MozaikMasterFile to TigerFiles into
+#       the classes themselves, to remove all of these helper functions.
+#       The resulting preview code for the console would be:
+#           sum(tf.print() for tf in MozaikMasterFile().to_tigerfiles())
+#       Or:
+#           sum(tf.print() for tf in TigerFiles.from_masterfile(filename))
 def preview_masterfile(masterfile):
     """ Preview a MozaikMasterFile in the console. """
     return sum(

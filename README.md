@@ -25,7 +25,7 @@ Mozaik outputs long lines when several cabinets use the same part. The lines
 are too long to display in TigerTouch, so **TigerTamer** will split the large
 part-lines into several smaller parts. Mozaik will also 'drop' parts sometimes.
 Mozaik may output a CSV line like this:
-```csv
+```
 12,1.5,86.50001,RS,R5:1&2&3&4&5&6&10&11 R7:1&2&3&7&8,
 ```
 
@@ -101,16 +101,13 @@ Options:
 There are a few third-party PyPi packages needed to run this.
 To install them, run `pip install -r requirements.txt`.
 
--   [colr](https://pypi.org/project/colr):
-    Used for terminal colors.
--   [docopt](https://pypi.org/project/docopt):
-    Used for command-line argument parsing.
--   [easysettings](https://pypi.org/project/easysettings):
-    Used for JSON-based configuration.
--   [lxml](https://pypi.org/project/lxml):
-    Used to create XML files.
--   [printdebug](https://pypi.org/project/printdebug):
-    Used for debug mode printing/logging.
+Package: | Description:
+------: | -----
+[colr](https://pypi.org/project/colr) | Used for terminal colors.
+[docopt](https://pypi.org/project/docopt) | Used for command-line argument parsing.
+[easysettings](https://pypi.org/project/easysettings) | Used for JSON-based configuration.
+[lxml](https://pypi.org/project/lxml) | Used to create XML files.
+[printdebug](https://pypi.org/project/printdebug) | Used for debug mode printing/logging.
 
 ## Installation
 
