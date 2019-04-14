@@ -47,46 +47,46 @@ settings = {
         'unit',
         'English'
     ),
-    'isOptimized': tigerconfig.get(
+    'isOptimized': str(tigerconfig.get(
         'isOptimized',
         'true'
-    ),
-    'headCut': tigerconfig.get(
+    )).lower(),
+    'headCut': str(tigerconfig.get(
         'headCut',
         '0'
-    ),
-    'tailCut': tigerconfig.get(
+    )),
+    'tailCut': str(tigerconfig.get(
         'tailCut',
         '0'
-    ),
-    'patternStockLength': tigerconfig.get(
+    )),
+    'patternStockLength': str(tigerconfig.get(
         'patternStockLength',
         '0'
-    ),
-    'sequenceNumber': tigerconfig.get(
+    )),
+    'sequenceNumber': str(tigerconfig.get(
         'sequenceNumber',
         '1'
-    ),
+    )),
     'sortString': tigerconfig.get(
         'sortString',
         None
     ),
-    'sendFileName': tigerconfig.get(
+    'sendFileName': str(tigerconfig.get(
         'sendFileName',
         'true'
-    ),
-    'quantityMultiples': tigerconfig.get(
+    )).lower(),
+    'quantityMultiples': str(tigerconfig.get(
         'quantityMultiples',
         'false'
-    ),
-    'isInfinite': tigerconfig.get(
+    )).lower(),
+    'isInfinite': str(tigerconfig.get(
         'isInfinite',
         'false'
-    ),
-    'isCascade': tigerconfig.get(
+    )).lower(),
+    'isCascade': str(tigerconfig.get(
         'isCascade',
         'false'
-    ),
+    )).lower(),
     'labels': tigerconfig.get(
         'labels',
         [],
