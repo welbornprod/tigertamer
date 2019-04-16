@@ -55,6 +55,11 @@ from lib.util.logger import (
     set_debug_mode,
     status,
 )
+from lib.util.preview import (
+    LargeFileError,
+    TigerFiles,
+    check_file,
+)
 from lib.gui.main import (
     list_funcs,
     load_gui,
@@ -330,46 +335,22 @@ def options_are_set(*args):
 
 def preview_file(filepath):
     """ Preview a Mozaik file as a Tiger file. """
-    if not os.path.exists(filepath):
-        print_err('File does not exist:\n{}'.format(filepath))
-        return 1
-    st = os.stat(filepath)
-    bytesize = st.st_size
-    if bytesize > 4000:
+    try:
+        check_file(filepath)
+    except LargeFileError as ex:
         msg = '\n'.join((
-            'File is large: {}'.format(filepath),
+            str(C(ex)),
             '',
-            'This may take a minute, continue?'
+            str(C('Continue anyway?', 'cyan')),
         ))
         if not confirm(msg):
             return 1
-    masterfile = MozaikMasterFile.from_file(filepath, split_parts=True)
-    return preview_masterfile(masterfile)
+    return TigerFiles.from_file(filepath, split_parts=True).print()
 
 
 def preview_files(filepaths):
     """ Preview multiple Mozaik files as Tiger files. """
     return sum(preview_file(s) for s in filepaths)
-
-
-# TODO: Move the quick conversions from MozaikMasterFile to TigerFiles into
-#       the classes themselves, to remove all of these helper functions.
-#       The resulting preview code for the console would be:
-#           sum(tf.print() for tf in MozaikMasterFile().to_tigerfiles())
-#       Or:
-#           sum(tf.print() for tf in TigerFiles.from_masterfile(filename))
-def preview_masterfile(masterfile):
-    """ Preview a MozaikMasterFile in the console. """
-    return sum(
-        preview_mozfile(mozfile)
-        for mozfile in masterfile.into_width_files()
-    )
-
-
-def preview_mozfile(mozfile):
-    """ Preview a MozaikFile in the console. """
-    tf = TigerFile.from_mozfile(mozfile)
-    return 0 if tf.print() else 1
 
 
 def remove_tiger_files(outdir):
@@ -492,13 +473,17 @@ def entry_point(argv=None):
     except InvalidArg as ex:
         print_err(ex)
         mainret = 1
+    except FileNotFoundError as ex:
+        print_err('File not found: {}'.format(ex.filename))
+        mainret = 2
     except (EOFError, KeyboardInterrupt):
         print_err('\nUser cancelled.\n')
         mainret = 2
     except BrokenPipeError:
         print_err('\nBroken pipe, input/output was interrupted.\n')
         mainret = 3
-    lock_release()
+    finally:
+        lock_release()
     sys.exit(mainret)
 
 

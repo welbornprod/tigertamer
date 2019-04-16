@@ -13,6 +13,7 @@ from .common import (
     show_error,
     show_question,
     tk,
+    trim_file_path,
     ttk,
     WinToplevelBase,
 )
@@ -29,6 +30,11 @@ from ..util.logger import (
 )
 from ..util.parser import (
     MozaikMasterFile,
+)
+from ..util.preview import (
+    LargeFileError,
+    TigerFiles,
+    check_file,
 )
 
 
@@ -426,6 +432,24 @@ class WinViewer(WinToplevelBase):
         self.btn_close.configure(state=state)
         self.menu_file.entryconfigure('Close', state=state)
 
+    def enable_interface(self, enabled=True):
+        """ Enable/Disable the user interface (while running,
+            or after running).
+        """
+        state = tk.NORMAL if enabled else tk.DISABLED
+        widgets = (
+            self.btn_open,
+        )
+        for widget in widgets:
+            widget.configure(state=state)
+
+        # Main menus.
+        menus = (
+            'File',
+        )
+        for name in menus:
+            self.menu_main.entryconfigure(name, state=state)
+
     def format_value(self, column, value):
         """ Format a value for the tree_view, with decent default values. """
         defaults = {
@@ -452,25 +476,24 @@ class WinViewer(WinToplevelBase):
         self.clear_tabs()
 
         for filename in filenames:
-            if not os.path.exists(filename):
+            try:
+                check_file(filename)
+            except FileNotFoundError:
                 self.show_error('File does not exist:\n{}'.format(filename))
                 return
-            st = os.stat(filename)
-            bytesize = st.st_size
-            if bytesize > 4000:
+            except LargeFileError as ex:
                 msg = '\n'.join((
-                    'File is large:',
-                    filename,
+                    'File is large: ({} bytes)'.format(ex.size),
+                    trim_file_path(ex.filepath),
                     '',
                     'This may take a minute, continue?'
                 ))
                 if not self.show_question(msg):
                     return
-        masterfiles = [
-            MozaikMasterFile.from_file(s, split_parts=True)
-            for s in filenames
-        ]
-        return self.view_masterfiles(masterfiles)
+            # TODO: Show a 'busy' window while working on the parts,
+            #       and use the callback from view_masterfiles to remove it.
+            for tigerfile in TigerFiles.from_file(filename, split_parts=True):
+                self.view_tigerfile(tigerfile)
 
     def remove_tab(self, tabid):
         """ Remove a tab and it's associated file name. """
@@ -511,29 +534,9 @@ class WinViewer(WinToplevelBase):
         self.deiconify()
         return ret
 
-    def view_file(self, filename):
-        """ Load file contents into a new tab. """
-        tf = TigerFile.from_file(filename)
-        self.view_tigerfile(tf)
-
     def view_files(self, filenames):
         for filename in filenames:
-            self.view_file(filename)
-
-    def view_masterfile(self, masterfile):
-        """ Load parts from a MozaikMasterFile into a new tab. """
-        for mozfile in masterfile.into_width_files():
-            self.view_mozfile(mozfile)
-
-    def view_masterfiles(self, masterfiles):
-        """ Load parts from multiple MozaikMasterFiles into a new tab. """
-        for masterfile in masterfiles:
-            self.view_masterfile(masterfile)
-
-    def view_mozfile(self, mozfile):
-        """ Load parts from a MozaikFile into a new tab. """
-        tf = TigerFile.from_mozfile(mozfile)
-        return self.view_tigerfile(tf)
+            self.view_tigerfile(TigerFile.from_file(filename))
 
     def view_tigerfile(self, tigerfile):
         """ Load TigerFile instance parts into a new tab. """
