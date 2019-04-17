@@ -2,3 +2,4 @@ example_data
 *.log
 tigertamer.json
 *.lock
+*notes.txt
