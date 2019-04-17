@@ -273,7 +273,7 @@ class WinLabels(WinToplevelBase):
             d = {}
             lblconfig.append((name, d))
         # Set config values if they are not empty.
-        if fontsize or (fontsize == 0):
+        if fontsize and (int(fontsize) > 0):
             d['fontsize'] = fontsize
         else:
             debug('Not setting empty {}.fontsize!'.format(name))
