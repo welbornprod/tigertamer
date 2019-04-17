@@ -837,11 +837,6 @@ class WinMain(tk.Tk):
         if allow_auto_exit and self.var_auto_exit.get():
             self.destroy()
 
-    def show_fatal_error(self, msg):
-        """ Show an error message and close. """
-        show_error(msg)
-        self.destroy()
-
     def show_report(
             self, parent_files, error_files, success_files,
             allow_auto_exit=True, parent_name='Master', success_name='Tiger'):
