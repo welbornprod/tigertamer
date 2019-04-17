@@ -1,5 +1,5 @@
 colr >= 0.8.6
 docopt >= 0.6.2
-easysettings >= 2.1.5
+easysettings >= 2.2.0
 lxml >= 4.2.1
 printdebug >= 0.3.5
