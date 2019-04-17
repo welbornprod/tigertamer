@@ -907,18 +907,17 @@ def load_gui(**kwargs):
     win = WinMain(**kwargs)  # noqa
     if (tiger_files is not None) and (not tiger_files):
         # --view was used without file paths.
-        win.after_idle(
-            win.show_fatal_error('No Tiger (.tiger) files provided.')
-        )
+        win.withdraw()
+        show_error('No Tiger (.tiger) files provided for viewing.')
+        return 1
     elif (preview_files is not None) and (not preview_files):
         # --preview was used without file paths.
-        win.after_idle(
-            win.show_fatal_error('No Mozaik (.dat) files provided.')
-        )
+        win.withdraw()
+        show_error('No Mozaik (.dat) files provided for preview.')
+        return 1
     elif tiger_files or preview_files:
         # Schedule a viewing/previewing when ready.
         win.after_idle(win.cmd_menu_viewer, tiger_files, preview_files)
-
     try:
         lock_acquire()
     except ValueError:
