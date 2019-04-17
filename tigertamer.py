@@ -65,7 +65,6 @@ from lib.gui.main import (
     load_gui,
 )
 from lib.util.parser import (
-    MozaikMasterFile,
     create_xml,
     get_archive_info,
     get_tiger_files,
@@ -140,8 +139,10 @@ def main(argd):
     """
     set_debug_mode(argd['--debug'])
     debug('Debugging enabled.')
-
+    # Get input paths, with no blanks (mainly for testing error messages).
+    argd['FILE'] = [s for s in argd['FILE'] if s.strip()]
     inpaths = argd['FILE'] or config_get('dat_dir', [])
+    debug('Input paths for conversion: {}'.format(inpaths))
     if all(s.lower().endswith('.tiger') for s in inpaths):
         # If all input files are tiger files, --view is implicit.
         argd['--view'] = True
@@ -170,6 +171,12 @@ def main(argd):
 
     if argd['--gui'] or argd['--func']:
         # The GUI handles arguments differently, send it the correct config.
+        if argd['--view'] or argd['--preview']:
+            # Supply input paths from config. They won't be used.
+            # It keeps the GUI from overwriting the last known dat dir
+            # when viewing/previewing files.
+            inpaths = config_get('dat_dir', [])
+            debug('Input paths reloaded/saved: {}'.format(inpaths))
         return load_gui(
             auto_exit=config_get('auto_exit', False),
             auto_run=argd['--run'],

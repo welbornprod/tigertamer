@@ -837,6 +837,11 @@ class WinMain(tk.Tk):
         if allow_auto_exit and self.var_auto_exit.get():
             self.destroy()
 
+    def show_fatal_error(self, msg):
+        """ Show an error message and close. """
+        show_error(msg)
+        self.destroy()
+
     def show_report(
             self, parent_files, error_files, success_files,
             allow_auto_exit=True, parent_name='Master', success_name='Tiger'):
@@ -897,8 +902,20 @@ def load_gui(**kwargs):
     tiger_files = kwargs.pop('tiger_files')
     preview_files = kwargs.pop('preview_files')
     debug('Starting main window...')
+    debug('tiger_files: {}'.format(tiger_files))
+    debug('preview_files: {}'.format(preview_files))
     win = WinMain(**kwargs)  # noqa
-    if tiger_files or preview_files:
+    if (tiger_files is not None) and (not tiger_files):
+        # --view was used without file paths.
+        win.after_idle(
+            win.show_fatal_error('No Tiger (.tiger) files provided.')
+        )
+    elif (preview_files is not None) and (not preview_files):
+        # --preview was used without file paths.
+        win.after_idle(
+            win.show_fatal_error('No Mozaik (.dat) files provided.')
+        )
+    elif tiger_files or preview_files:
         # Schedule a viewing/previewing when ready.
         win.after_idle(win.cmd_menu_viewer, tiger_files, preview_files)
 
