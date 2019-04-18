@@ -142,22 +142,32 @@ def config_load():
     return c
 
 
-def config_save(d=None):
+def config_save(d=None, sub_dict_ok=False):
     global config
     # Reload config from disk, because other threads may have changed it.
     config = config_load()
-
+    subitemcnt = 0
     if d:
-        ok_dicts = ('tiger_settings', )
         for key, val in d.items():
-            if (key not in ok_dicts) and isinstance(val, dict):
-                debug_err(
-                    'Saving a dict in config for {!r}!: {!r}'.format(key, val),
-                    level=1,
-                )
+            if isinstance(val, dict):
+                subitemcnt += len(val)
+                if (not sub_dict_ok):
+                    debug_err(
+                        'Saving a dict in config for {!r}!: {!r}'.format(
+                            key,
+                            val,
+                        ),
+                        level=1,
+                    )
         config.update(d)
     # debug_obj(dict(config.items()), msg='Saving config:')
-    debug('Saving config (items: {})'.format(len(d or config)))
+    debug('Saving config (items: {}{})'.format(
+        len(d or config),
+        ' + {} sub-item{}'.format(
+            subitemcnt,
+            '' if subitemcnt == 1 else 's',
+        ) if subitemcnt else '',
+    ))
     try:
         config.save(sort_keys=True)
     except EnvironmentError as ex:

@@ -217,7 +217,7 @@ def label_config_get(use_display_order=False):
 def label_config_save(lbl_config):
     """ Save label config in the configuration file. """
     settings['labels'] = lbl_config or {}
-    config_save({'tiger_settings': settings})
+    config_save({'tiger_settings': settings}, sub_dict_ok=True)
 
 
 def list_labelconfig():
