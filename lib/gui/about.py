@@ -89,7 +89,9 @@ class WinAbout(WinToplevelBase):
 
         # Initialize this window.
         self.title('{} - About'.format(NAME))
-        self.geometry(self.settings.get('geometry_about', '442x246'))
+        self.geometry(
+            self.settings.get('geometry_about', None) or '442x246'
+        )
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Make the main frame expand.

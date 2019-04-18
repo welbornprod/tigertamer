@@ -49,7 +49,9 @@ class WinReport(WinToplevelBase):
         self.success_len = len(self.success_files)
 
         self.title('{} - {}'.format(NAME, self.title_msg))
-        self.geometry(self.settings.get('geometry_report', '331x301'))
+        self.geometry(
+            self.settings.get('geometry_report', None) or '331x301'
+        )
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
         self.frm_main.pack(fill=tk.BOTH, expand=True)
 

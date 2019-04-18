@@ -56,7 +56,9 @@ class WinViewer(WinToplevelBase):
         # Initialize this window.
         self.default_title = '{} - Viewer'.format(NAME)
         self.title(self.default_title)
-        self.geometry(self.settings.get('geometry_viewer', '554x141'))
+        self.geometry(
+            self.settings.get('geometry_viewer', None) or '554x141'
+        )
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Hotkey and Menu information for this window, programmatically setup.

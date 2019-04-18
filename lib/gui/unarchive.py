@@ -50,7 +50,9 @@ class WinUnarchive(WinToplevelBase):
         self.attributes('-topmost', 1)
 
         self.title('{} - Unarchive'.format(NAME))
-        self.geometry(self.settings.get('geometry_unarchive', '731x163'))
+        self.geometry(
+            self.settings.get('geometry_unarchive', None) or '731x163'
+        )
 
         # Hotkey info.
         hotkeys = {

@@ -68,7 +68,9 @@ class WinMain(tk.Tk):
         debug_obj(self.settings, msg='Using GUI config:')
 
         self.title('Tiger Tamer')
-        self.geometry(self.settings.get('geometry', '331x301'))
+        self.geometry(
+            self.settings.get('geometry', None) or '331x301'
+        )
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
         self.frm_main.pack(fill=tk.BOTH, expand=True)
         self.style = ttk.Style()
@@ -478,7 +480,7 @@ class WinMain(tk.Tk):
             else:
                 func = getattr(self, name, None)
             if func is None:
-                raise ValueError('Invalid function name: {}}'.format(
+                raise ValueError('Invalid function name: {}'.format(
                     name,
                 ))
         if not callable(func):
@@ -775,10 +777,9 @@ class WinMain(tk.Tk):
         self.settings['extra_data'] = self.var_extra_data.get()
         self.settings['no_part_split'] = self.var_no_part_split.get()
         # Child windows have saved their geometry already.
-        self.settings.pop('geometry_report')
-        self.settings.pop('geometry_about')
-        self.settings.pop('geometry_unarchive')
-        self.settings.pop('geometry_viewer')
+        for key in list(self.settings):
+            if key.startswith('geometry_'):
+                self.settings.pop(key)
         config_save(self.settings)
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
