@@ -41,7 +41,9 @@ class WinLabels(WinToplevelBase):
 
         # Initialize this window.
         self.title('{} - Labels'.format(NAME))
-        self.geometry(self.settings.get('geometry_labels', '442x246'))
+        self.geometry(
+            self.settings.get('geometry_labels', None) or '420x186'
+        )
         # About window should stay above the main window.
         self.attributes('-topmost', 1)
         # Make the main frame expand.
@@ -49,6 +51,10 @@ class WinLabels(WinToplevelBase):
         self.rowconfigure(0, weight=1)
 
         self.lbl_config = label_config_get()
+        # Max values, no matter what font size is selected.
+        self.max_lbl_x = 489
+        self.max_lbl_y = 204
+
         # Label that was selected before new label selection (None at first).
         self.last_label = None
 
@@ -56,9 +62,17 @@ class WinLabels(WinToplevelBase):
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
         self.frm_main.pack(fill=tk.BOTH, expand=True)
 
-        # # Config frame.
+        # # Top frame.
+        self.frm_top = ttk.Frame(self.frm_main, padding='2 2 2 2')
+        self.frm_top.pack(
+            side=tk.TOP,
+            fill=tk.X,
+            expand=True,
+        )
+
+        # # # Config frame.
         self.frm_config = ttk.LabelFrame(
-            self.frm_main,
+            self.frm_top,
             text='Labels:',
             padding='2 2 2 2',
         )
@@ -89,8 +103,8 @@ class WinLabels(WinToplevelBase):
             # Ensure the selection event fires (with no event info though).
             self.event_cmb_labels_select(None)
 
-        # # Label preview.
-        self.frm_canvas = ttk.Frame(self.frm_main, padding='2 2 2 2')
+        # # # Label preview.
+        self.frm_canvas = ttk.Frame(self.frm_top, padding='2 2 2 2')
         self.frm_canvas.pack(
             side=tk.RIGHT,
             fill=tk.X,
@@ -99,14 +113,14 @@ class WinLabels(WinToplevelBase):
         )
         # Set canvas width/height to a 2in by 1in label.
         cnv_height = 100
-        cnv_width = int(cnv_height * 1.6)
+        cnv_width = int(cnv_height * 2)
         self.canvas_lbl = tk.Canvas(
             self.frm_canvas,
             height=cnv_height,
             width=cnv_width,
             background='white',
         )
-        self.canvas_lbl.pack(fill=tk.BOTH, expand=False)
+        self.canvas_lbl.pack(fill=tk.NONE, expand=False)
         self.entry_fontsize.bind(
             '<Return>',
             self.event_entry_return
@@ -122,7 +136,72 @@ class WinLabels(WinToplevelBase):
         # References to canvas items.
         self.canvas_ids = []
         self.update_label_canvas()
-        # TODO: Add OK/SAVE and CANCEL/EXIT buttons.
+
+        # # Bottom frame.
+        self.frm_bottom = ttk.Frame(self.frm_main, padding='5 10 5 2')
+        self.frm_bottom.pack(
+            side=tk.BOTTOM,
+            fill=tk.X,
+            expand=True,
+        )
+
+        # # # Buttons.
+        btninfo = {
+            'Ok': {
+                'char': 'O',
+                'func': self.cmd_btn_ok,
+            },
+            'Cancel': {
+                'char': 'C',
+                'func': self.cmd_btn_cancel,
+            }
+        }
+        btnwidth = len(max(btninfo, key=len)) + 1
+        # Ok button.
+        oklbl = 'Ok'
+        self.btn_ok = ttk.Button(
+            self.frm_bottom,
+            text=oklbl,
+            underline=oklbl.index(btninfo[oklbl]['char']),
+            width=btnwidth,
+            command=btninfo[oklbl]['func'],
+        )
+        self.btn_ok.pack(
+            side=tk.LEFT,
+            fill=tk.NONE,
+            expand=False,
+            anchor=tk.SW,
+        )
+
+        # Cancel button.
+        cancellbl = 'Cancel'
+        self.btn_cancel = ttk.Button(
+            self.frm_bottom,
+            text=cancellbl,
+            underline=cancellbl.index(btninfo[cancellbl]['char']),
+            width=btnwidth,
+            command=btninfo[cancellbl]['func'],
+        )
+        self.btn_cancel.pack(
+            side=tk.RIGHT,
+            fill=tk.NONE,
+            expand=False,
+            anchor=tk.SE,
+        )
+
+        # Bind hotkeys for buttons.
+        for info in btninfo.values():
+            self.bind_all(
+                '<Control-{}>'.format(info['char'].lower()),
+                create_event_handler(info['func']),
+            )
+
+    def _build_entries(self):
+        """ Build the label/emtry pairs for each editable value for the
+            labels.
+        """
+        for val_name in ('font_size', 'x', 'y'):
+            self._build_entry(val_name)
 
     def _build_entry(self, name):
         """ Build a single label/entry pair for an editable value. """
@@ -195,14 +274,12 @@ class WinLabels(WinToplevelBase):
         entry = getattr(self, entryname)
         entry.pack(side=tk.RIGHT)
 
-    def _build_entries(self):
-        """ Build the label/emtry pairs for each editable value for the
-            labels.
-        """
-        for val_name in ('font_size', 'x', 'y'):
-            self._build_entry(val_name)
+    def cmd_btn_cancel(self):
+        """ Handles btn_cancel.click. """
+        return self.destroy()
 
-    def destroy(self):
+    def cmd_btn_ok(self):
+        """ Handles btn_ok.click. """
         if self.last_label:
             # Save current label config in memory.
             self.label_info_set(
@@ -211,11 +288,21 @@ class WinLabels(WinToplevelBase):
                 x=self.var_x.get(),
                 y=self.var_y.get(),
             )
+        invalidnames = self.get_invalid_config_names()
+        if invalidnames:
+            show_error('Invalid config for label:\n  {}'.format(
+                '\n  '.join(invalidnames)
+            ))
+            return
+        debug('Saving label config...')
+        label_config_save(self.lbl_config)
+        return self.destroy()
+
+    def destroy(self):
+        """ Close the window. """
         debug('Saving gui-labels config...')
         self.settings['geometry_labels'] = self.geometry()
         config_save(self.settings)
-        debug('Saving label config...')
-        label_config_save(self.lbl_config)
         debug('Closing labels window (geometry={!r}).'.format(
             self.settings['geometry_labels']
         ))
@@ -297,6 +384,7 @@ class WinLabels(WinToplevelBase):
         self.canvas_lbl.delete(tk.ALL)
         self.canvas_ids = []
         for name, lblinfo in self.lbl_config:
+            # TODO: These are not scaled correctly. Look at pt size vs inches.
             fontsize = int(int(lblinfo['fontsize']) // 1.5)
             x = int(int(lblinfo['x']) // 1.25)
             y = int(int(lblinfo['y']) // 1.25)
@@ -346,6 +434,12 @@ class WinLabels(WinToplevelBase):
         y = lblinfo.get('y', '0')
         self.var_y.set(y)
         self.entry_set(self.entry_y, y)
+
+    def get_invalid_config_names(self):
+        """ Returns a list of labels with invalid config, or
+            an empty list if all are valid.
+        """
+        return []
 
     def validation_debug(self, *args):
         arg_names = (
