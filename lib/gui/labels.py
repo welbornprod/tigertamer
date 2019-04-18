@@ -54,6 +54,8 @@ class WinLabels(WinToplevelBase):
         # Max values, no matter what font size is selected.
         self.max_lbl_x = 489
         self.max_lbl_y = 204
+        # Acceptable font sizes (according to TigerLink 6).
+        self.valid_font_sizes = (6, 9, 12, 16, 24)
 
         # Label that was selected before new label selection (None at first).
         self.last_label = None
@@ -85,7 +87,7 @@ class WinLabels(WinToplevelBase):
         self.cmb_labels = ttk.Combobox(
             self.frm_config,
             state='readonly',
-            values=[name.title() for name, _ in self.lbl_config],
+            values=self.label_names(title=True),
         )
         self.cmb_labels.pack(side=tk.TOP, fill=tk.X, expand=True)
         self.cmb_labels.bind(
@@ -280,20 +282,22 @@ class WinLabels(WinToplevelBase):
 
     def cmd_btn_ok(self):
         """ Handles btn_ok.click. """
-        if self.last_label:
-            # Save current label config in memory.
-            self.label_info_set(
-                self.last_label,
-                fontsize=self.var_fontsize.get(),
-                x=self.var_x.get(),
-                y=self.var_y.get(),
-            )
-        invalidnames = self.get_invalid_config_names()
-        if invalidnames:
-            show_error('Invalid config for label:\n  {}'.format(
-                '\n  '.join(invalidnames)
-            ))
+        # Save current label config in memory.
+        self.update_label_config()
+        # Validate label config before saving.
+        err_lines = []
+        for lblname in self.label_names():
+            try:
+                self.validate_lbl_config(lblname)
+            except ValueError as ex:
+                err_lines.append(str(ex))
+                self.label_select(lblname)
+
+        if err_lines:
+            # Bad config, can't save.
+            self.show_error('\n\n'.join(err_lines))
             return
+
         debug('Saving label config...')
         label_config_save(self.lbl_config)
         return self.destroy()
@@ -335,6 +339,10 @@ class WinLabels(WinToplevelBase):
         # Update the label info entries.
         self.update_label_entries()
         self.last_label = name
+
+    def label_index(self, name):
+        """ Get an index into `cmb_labels` or `lbl_config` by name. """
+        return self.label_names().index(name.lower())
 
     def label_info_get(self, name):
         """ Get config values for a specific label by name. """
@@ -378,6 +386,15 @@ class WinLabels(WinToplevelBase):
         ))
 
         self.update_label_canvas()
+
+    def label_names(self, title=False):
+        """ Get the names for all label's in `self.lbl_config`. """
+        return tuple((s.title() if title else s) for s, _ in self.lbl_config)
+
+    def label_select(self, name):
+        """ Select a label in `cmb_labels` by name. """
+        self.cmb_labels.current(self.label_index(name))
+        self.update_label_entries()
 
     def update_label_canvas(self):
         """ Re-draw the label preview canvas based on self.lbl_config. """
@@ -425,7 +442,10 @@ class WinLabels(WinToplevelBase):
         name = self.cmb_labels.get()
         # Update the label info entries.
         lblinfo = self.label_info_get(name)
-        fontsize = lblinfo.get('fontsize', '0')
+        fontsize = lblinfo.get(
+            'fontsize',
+            str(self.valid_font_sizes[0])
+        )
         self.var_fontsize.set(fontsize)
         self.entry_set(self.entry_fontsize, fontsize)
         x = lblinfo.get('x', '0')
@@ -434,12 +454,6 @@ class WinLabels(WinToplevelBase):
         y = lblinfo.get('y', '0')
         self.var_y.set(y)
         self.entry_set(self.entry_y, y)
-
-    def get_invalid_config_names(self):
-        """ Returns a list of labels with invalid config, or
-            an empty list if all are valid.
-        """
-        return []
 
     def validation_debug(self, *args):
         arg_names = (
@@ -481,3 +495,89 @@ class WinLabels(WinToplevelBase):
             return False
 
         return True
+
+    def validate_lbl_config(self, name):
+        """ Validate a label's config settings by name.
+
+        """
+        name = name.lower()
+        lblinfo = self.label_info_get(name)
+        if not lblinfo:
+            raise ValueError(
+                'Label config not found: {}'.format(name)
+            )
+        # Font size validation.
+        fontsize_cfg = lblinfo.get('fontsize', self.valid_font_sizes[0])
+        try:
+            fontsize = int(fontsize_cfg or self.valid_font_sizes[0])
+        except (TypeError, ValueError):
+            raise ValueError(
+                'Font size for {} is not a number: {}'.format(
+                    name,
+                    fontsize_cfg,
+                )
+            )
+        if fontsize not in self.valid_font_sizes:
+            raise ValueError(
+                'Invalid font size for {}: {}\n\nExpecting one of: {}'.format(
+                    name.title(),
+                    fontsize_cfg,
+                    ', '.join(str(x) for x in self.valid_font_sizes)
+                )
+            )
+
+        # X validation.
+        x_cfg = lblinfo.get('x', '0')
+        try:
+            x = int(x_cfg or 0)
+        except (TypeError, ValueError):
+            raise ValueError(
+                'X position for {!r} is not a number: {}'.format(
+                    name.title(),
+                    x_cfg
+                )
+            )
+        if x < 0:
+            raise ValueError(
+                'X position for {!r} must be positive: {}'.format(
+                    name.title(),
+                    x_cfg
+                )
+            )
+        if x > self.max_lbl_x:
+            raise ValueError(
+                'X position for {!r} must be less than {}: {}'.format(
+                    name.title(),
+                    self.max_lbl_x,
+                    x_cfg,
+                )
+            )
+
+        # Y validation.
+        y_cfg = lblinfo.get('y', '0')
+        try:
+            y = int(y_cfg or 0)
+        except (TypeError, ValueError):
+            raise ValueError(
+                'Y position for {!r} is not a number: {}'.format(
+                    name.title(),
+                    y_cfg
+                )
+            )
+        if y < 0:
+            raise ValueError(
+                'Y position for {!r} must be positive: {}'.format(
+                    name.title(),
+                    y_cfg
+                )
+            )
+        if y > self.max_lbl_y:
+            raise ValueError(
+                'Y position for {!r} must be less than {}: {}'.format(
+                    name.title(),
+                    self.max_lbl_y,
+                    y_cfg,
+                )
+            )
+
+
