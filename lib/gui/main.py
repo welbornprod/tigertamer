@@ -530,7 +530,7 @@ class WinMain(tk.Tk):
                 split_parts=not self.var_no_part_split.get(),
             )
         except OSError as ex:
-            show_error('Cannot load .dat files in: {}\n{}'.format(
+            self.show_error('Cannot load .dat files in: {}\n{}'.format(
                 mozdir,
                 ex,
             ))
@@ -538,7 +538,7 @@ class WinMain(tk.Tk):
             return
 
         if not mozfiles:
-            show_error('No Mozaik (.dat) files found in: {}'.format(
+            self.show_error('No Mozaik (.dat) files found in: {}'.format(
                 mozdir,
             ))
             self.enable_interface(True)
@@ -656,11 +656,11 @@ class WinMain(tk.Tk):
         try:
             filepaths = get_tiger_files(outdir)
         except OSError as ex:
-            show_error(ex)
+            self.show_error(ex)
             return False
 
         if not filepaths:
-            show_error('No files to remove: {}'.format(outdir))
+            self.show_error('No files to remove: {}'.format(outdir))
             return False
 
         if not self.confirm_remove(filepaths):
@@ -837,6 +837,15 @@ class WinMain(tk.Tk):
         self.enable_interface()
         if allow_auto_exit and self.var_auto_exit.get():
             self.destroy()
+
+    def show_error(self, msg):
+        """ Use show_error, but make sure this window is out of the way. """
+        old_topmost = self.attributes('-topmost')
+        self.attributes('-topmost', 0)
+        self.lower()
+        show_error(msg)
+        self.attributes('-topmost', old_topmost)
+        self.lift()
 
     def show_report(
             self, parent_files, error_files, success_files,

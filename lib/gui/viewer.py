@@ -518,14 +518,6 @@ class WinViewer(WinToplevelBase):
             self.build_tab()
             self.enable_close(False)
 
-    def show_error(self, msg):
-        """ Use show_error, but make sure this window is out of the way. """
-        self.attributes('-topmost', 0)
-        self.withdraw()
-        show_error(msg)
-        self.attributes('-topmost', 1)
-        self.deiconify()
-
     def show_question(self, msg, title=None):
         """ Use show_question, but make sure this window is out of the way.
         """

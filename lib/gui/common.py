@@ -217,6 +217,15 @@ class WinToplevelBase(tk.Toplevel):
         """ Shortcut for self.debug_attr('settings'). """
         return self.debug_attr('settings', level=level + 1)
 
+    def show_error(self, msg):
+        """ Use show_error, but make sure this window is out of the way. """
+        old_topmost = self.attributes('-topmost')
+        self.attributes('-topmost', 0)
+        self.lower()
+        show_error(msg)
+        self.lift()
+        self.attributes('-topmost', old_topmost)
+
 
 # Use TkErrorLogger
 tk.CallWrapper = TkErrorLogger
