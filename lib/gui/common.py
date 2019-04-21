@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk  # noqa (stored here for cleaner API)
 from tkinter import filedialog  # noqa
 from tkinter import messagebox
+from tkinter.font import Font  # noqa
 
 from ..util.logger import (
     debug,

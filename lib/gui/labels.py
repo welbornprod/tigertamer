@@ -5,12 +5,15 @@
     -Christopher Welborn 04-13-2019
 """
 
+from collections import UserList
+
 from .common import (
+    Font,
+    WinToplevelBase,
     create_event_handler,
     handle_cb,
     tk,
     ttk,
-    WinToplevelBase,
 )
 
 from ..util.config import (
@@ -26,6 +29,48 @@ from ..util.logger import (
     debug,
     debug_obj,
 )
+
+
+# TODO: Still not sure if scaling is correct.
+# TODO: Double-click tag to reset to file-based config values.
+
+
+class TagInfo(object):
+    """ A namedtuple-style class for canvas tag references.
+        Holds a canvas id, tag name, and a Font.
+    """
+    __slots__ = ('id', 'name', 'font', 'fontconfig', 'width', 'height')
+
+    def __init__(self, canvasid, name, font):
+        self.id = canvasid
+        self.name = name
+        self.font = font
+        self.fontconfig = font.configure()
+        self.width = self.font.measure(self.name)
+        self.height = self.font.metrics()['ascent']
+
+    def __str__(self):
+        return '{}: {} ({} {})'.format(
+            self.id,
+            self.name.title(),
+            self.fontconfig['family'],
+            self.fontconfig['size'],
+        )
+
+
+class TagInfos(UserList):
+    """ A list of TagInfos, held by ArialWinLabels. """
+    def tag_by_id(self, canvasid):
+        for canvastag in self:
+            if canvastag.id == canvasid:
+                return canvastag
+        raise ValueError('No TagInfo with that id: {!r}'.format(canvasid))
+
+    def tag_by_name(self, name):
+        for canvastag in self:
+            if canvastag.name == name:
+                return canvastag
+        raise ValueError('No TagInfo with that name: {!r}'.format(name))
 
 
 class WinLabels(WinToplevelBase):
@@ -50,14 +95,25 @@ class WinLabels(WinToplevelBase):
         self.rowconfigure(0, weight=1)
 
         self.lbl_config = label_config_get()
+
         # Max values, no matter what font size is selected.
-        self.max_lbl_x = 489
-        self.max_lbl_y = 204
+        # This size is in 'dots'.
+        self.max_dot_x = 446
+        self.max_dot_y = 268
+        # Convert dots to inches (Tk can set canvas widths in inches).
+        self.max_lbl_size_x = self.max_dot_x * 0.005
+        self.max_lbl_size_y = self.max_dot_y * 0.005
+        # Actual height/width of canvas in pixels.
+        self.max_lbl_x = self.max_dot_x // 2.23
+        self.max_lbl_y = self.max_dot_y // 1.34
         # Acceptable font sizes (according to TigerLink 6).
         self.valid_font_sizes = (6, 9, 12, 16, 24)
 
         # Label that was selected before new label selection (None at first).
         self.last_label = None
+
+        # Tag drag/drop info. Set in event_tag_*.
+        self.tag_drag = {'x': 0, 'y': 0, 'id': None, 'dragged': False}
 
         # Main frame.
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
@@ -98,30 +154,6 @@ class WinLabels(WinToplevelBase):
         self.frm_values.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
         self._build_entries()
-        if self.lbl_config:
-            # Select the first label, if any config was available.
-            self.cmb_labels.current(0)
-            # Ensure the selection event fires (with no event info though).
-            self.event_cmb_labels_select(None)
-
-        # # # Label preview.
-        self.frm_canvas = ttk.Frame(self.frm_top, padding='2 2 2 2')
-        self.frm_canvas.pack(
-            side=tk.RIGHT,
-            fill=tk.X,
-            expand=True,
-            pady=10,
-        )
-        # Set canvas width/height to a 2in by 1in label.
-        cnv_height = 100
-        cnv_width = int(cnv_height * 2)
-        self.canvas_lbl = tk.Canvas(
-            self.frm_canvas,
-            height=cnv_height,
-            width=cnv_width,
-            background='white',
-        )
-        self.canvas_lbl.pack(fill=tk.NONE, expand=False)
         self.entry_fontsize.bind(
             '<Return>',
             self.event_entry_return
@@ -134,16 +166,71 @@ class WinLabels(WinToplevelBase):
             '<Return>',
             self.event_entry_return
         )
+        if self.lbl_config:
+            # Select the first label, if any config was available.
+            self.cmb_labels.current(0)
+            # Ensure the selection event fires (with no event info though).
+            self.event_cmb_labels_select(None)
+
+        # # # Label preview.
+        self.frm_canvas = ttk.Frame(self.frm_top, padding='2 2 2 2')
+        self.frm_canvas.pack(
+            side=tk.RIGHT,
+            fill=tk.X,
+            expand=False,
+        )
+        # Set canvas width/height to a 2.2in by 1.25in label.
+        # Tkinter allows units of measurement in it's height/width values:
+        # c: Centimeters
+        # i: Inches
+        # m: Millimeters
+        # p: Printer's points (1/72")
+        self.canvas_lbl = tk.Canvas(
+            self.frm_canvas,
+            height='{}i'.format(self.max_lbl_size_y),
+            width='{}i'.format(self.max_lbl_size_x),
+            background='white',
+        )
+        self.canvas_lbl.pack(fill=tk.NONE, expand=False)
+        canvas_lbl_config = self.canvas_lbl.configure()
+        self.canvas_height = int(canvas_lbl_config['height'][4])
+        self.canvas_width = int(canvas_lbl_config['width'][4])
+        debug('Set canvas Height: {}, Width: {}'.format(
+            self.canvas_height,
+            self.canvas_width,
+        ))
+        self.canvas_lbl.bind(
+            '<Motion>',
+            self.event_canvas_lbl_motion
+        )
         # References to canvas items.
-        self.canvas_ids = []
+        self.canvas_tags = TagInfos()
         self.update_label_canvas()
 
-        # # Bottom frame.
-        self.frm_bottom = ttk.Frame(self.frm_main, padding='5 10 5 2')
-        self.frm_bottom.pack(
-            side=tk.BOTTOM,
+        # # Status frame.
+        self.frm_status = ttk.Frame(self.frm_main, padding='2 2 2 2')
+        self.frm_status.pack(
             fill=tk.X,
             expand=True,
+        )
+        self.var_status = tk.StringVar()
+        self.lbl_status = ttk.Label(
+            self.frm_status,
+            text="",
+            textvariable=self.var_status,
+            anchor=tk.E,
+            font='Monospace 9',
+        )
+        self.lbl_status.pack(
+            fill=tk.X,
+            expand=True,
+        )
+
+        # # Button frame.
+        self.frm_btns = ttk.Frame(self.frm_main, padding='5 2 5 2')
+        self.frm_btns.pack(
+            fill=tk.X,
+            expand=False,
         )
 
         # # # Buttons.
@@ -161,7 +248,7 @@ class WinLabels(WinToplevelBase):
         # Ok button.
         oklbl = 'Ok'
         self.btn_ok = ttk.Button(
-            self.frm_bottom,
+            self.frm_btns,
             text=oklbl,
             underline=oklbl.index(btninfo[oklbl]['char']),
             width=btnwidth,
@@ -177,7 +264,7 @@ class WinLabels(WinToplevelBase):
         # Cancel button.
         cancellbl = 'Cancel'
         self.btn_cancel = ttk.Button(
-            self.frm_bottom,
+            self.frm_btns,
             text=cancellbl,
             underline=cancellbl.index(btninfo[cancellbl]['char']),
             width=btnwidth,
@@ -236,7 +323,7 @@ class WinLabels(WinToplevelBase):
         setattr(
             self,
             varname,
-            tk.StringVar(value='0'),
+            tk.StringVar(frm, value='0'),
         )
         # Valid percent substitutions for validatecommand.
         # They are passed as arguments to the validation function.
@@ -324,13 +411,19 @@ class WinLabels(WinToplevelBase):
         self.entry_clear(entry)
         entry.insert(tk.END, text)
 
-    def event_entry_return(self, event):
-        """ Handler for <Return> in all Entry widgets. """
-        self.update_label_config()
-        self.update_label_canvas()
+    def event_canvas_lbl_motion(self, event):
+        """ Handler for mouse motion in `self.canvas_lbl`. """
+        x = event.x
+        y = event.y
+        if not self.tag_drag['dragged']:
+            # Don't update while dragging tags. event_tag_motion does that.
+            self.var_status.set(
+                'x:{:>3}, y:{:>3}'.format(int(x), int(y))
+            )
 
     def event_cmb_labels_select(self, event):
         """ Handler for self.cmd_labels selection. """
+        # This does not fire when self.cmb_labels.current(index) is called.
         name = self.cmb_labels.get()
         if self.last_label:
             # Save current label config in memory.
@@ -339,9 +432,78 @@ class WinLabels(WinToplevelBase):
         self.update_label_entries()
         self.last_label = name
 
+    def event_entry_return(self, event):
+        """ Handler for <Return> in all Entry widgets. """
+        self.update_label_config()
+        self.update_label_canvas()
+
+    def event_tag_motion(self, event):
+        """ Handler for tag left-down-motion in `self.canvas_lbl`. """
+        self.tag_drag['dragged'] = True
+        canvasid = self.tag_from_event(event)
+        coords = self.canvas_lbl.coords(canvasid)
+        tagx, tagy = int(coords[0]), int(coords[1])
+        # Find move-difference and "move" the tag by that much,
+        # only if it's within the bounds of the canvas.
+        delta_x = event.x - self.tag_drag['x']
+        delta_y = event.y - self.tag_drag['y']
+        # Don't move if it would move the tag outside the bounds.
+        newtagx = tagx + delta_x
+        newtagy = tagy + delta_y
+        taginfo = self.canvas_tags.tag_by_id(canvasid)
+        max_width = self.canvas_width - taginfo.width
+        max_height = self.canvas_height - taginfo.height
+        if (newtagx < 0) or (newtagx > max_width):
+            delta_x = 0
+        if (newtagy < 0) or (newtagy > max_height):
+            delta_y = 0
+
+        if delta_x or delta_y:
+            self.canvas_lbl.move(self.tag_drag['id'], delta_x, delta_y)
+
+        # Reset drag data, for next drag move.
+        self.tag_drag['x'] = event.x
+        self.tag_drag['y'] = event.y
+
+        # Dragging a tag, "fix" the status values to mean label x and y.
+        self.var_x.set(tagx)
+        self.var_y.set(tagy)
+        self.var_status.set(
+            'x:{:>3}, y:{:>3}'.format(tagx, tagy)
+        )
+
+    def event_tag_press(self, event):
+        """ Handler for tag left-button-down in `self.canvas_lbl`. """
+        self.tag_drag = {
+            'x': event.x,
+            'y': event.y,
+            'id': self.tag_from_event(event),
+            'dragged': False,
+        }
+        self.label_select_index(self.label_index_from_event(event))
+
+    def event_tag_release(self, event):
+        """ Handler for tag left-button-up in `self.canvas_lbl`. """
+        if self.tag_drag['dragged']:
+            name = self.label_name_from_event(event)
+            self.update_label_config(name=name)
+            # Save this label name so `event_cmb_labels_select` doesn't
+            # overwrite the wrong label info.
+            self.last_label = name
+        # Reset drag data.
+        self.tag_drag = {'x': 0, 'y': 0, 'id': None, 'dragged': False}
+
     def label_index(self, name):
         """ Get an index into `cmb_labels` or `lbl_config` by name. """
         return self.label_names().index(name.lower())
+
+    def label_index_from_event(self, event):
+        """ Get an index into `cmb_labels` or `lbl_config` by tag position.
+        """
+        canvasid = self.tag_from_event(event)
+        # Canvas ids are 1-based, and increment on every
+        # call to update_label_canvas().
+        return ((canvasid % 4) or 4) - 1
 
     def label_info_get(self, name):
         """ Get config values for a specific label by name. """
@@ -383,12 +545,16 @@ class WinLabels(WinToplevelBase):
             d['y'] = y
         else:
             debug('Not setting empty {}.y!'.format(name))
-        debug('Set label config for {!r}: {!r}'.format(
-            name,
-            self.label_info_get(name)
-        ))
 
         self.update_label_canvas()
+
+    def label_name(self, index):
+        """ Get a label name from an index. """
+        return self.label_names()[index]
+
+    def label_name_from_event(self, event):
+        """ Get a label name from a position in `event`. """
+        return self.label_name(self.label_index_from_event(event))
 
     def label_names(self, title=False):
         """ Get the names for all label's in `self.lbl_config`. """
@@ -396,35 +562,56 @@ class WinLabels(WinToplevelBase):
 
     def label_select(self, name):
         """ Select a label in `cmb_labels` by name. """
-        self.cmb_labels.current(self.label_index(name))
+        self.labels_select_index(self.label_index(name))
+
+    def label_select_index(self, index, no_canvas=False):
+        """ Select a label in `cmb_labels` by index. """
+        self.cmb_labels.current(index)
         self.update_label_entries()
+
+    def tag_from_event(self, event):
+        """ Return a tag id from an event's x,y coordinates. """
+        return self.canvas_lbl.find_closest(event.x, event.y)[0]
 
     def update_label_canvas(self):
         """ Re-draw the label preview canvas based on self.lbl_config. """
+        # Clear current tags and bindings for them.
+        for canvastag in self.canvas_tags:
+            self.canvas_lbl.tag_unbind(canvastag.id, '<ButtonPress-1>')
         self.canvas_lbl.delete(tk.ALL)
-        self.canvas_ids = []
+        self.canvas_tags = TagInfos()
+
         for name, lblinfo in self.lbl_config:
-            # TODO: These are not scaled correctly. Look at pt size vs inches.
-            fontsize = int(int(lblinfo['fontsize']) // 1.5)
-            x = int(int(lblinfo['x']) // 1.25)
-            y = int(int(lblinfo['y']) // 1.25)
-            debug('Drawing {} ({}) at: {}->{}, {}->{}'.format(
-                name,
-                fontsize,
-                lblinfo['x'],
-                x,
-                lblinfo['y'],
-                y,
-            ))
+            fontsize = int(lblinfo['fontsize'])
+            font = Font(family='Doris PP', size=fontsize, weight='normal')
+            x = int(lblinfo['x'])
+            y = int(lblinfo['y'])
             canvasid = self.canvas_lbl.create_text(
                 (x, y),
                 text=name.title(),
                 anchor=tk.NW,
                 activefill='blue',
                 fill='black',
-                font='Arial {}'.format(fontsize),
+                font=font,
             )
-            self.canvas_ids.append(canvasid)
+            # Save canvas id and bind event handlers to it.
+            canvastag = TagInfo(canvasid, name, font)
+            self.canvas_tags.append(canvastag)
+            self.canvas_lbl.tag_bind(
+                canvasid,
+                '<ButtonPress-1>',
+                self.event_tag_press,
+            )
+            self.canvas_lbl.tag_bind(
+                canvasid,
+                '<ButtonRelease-1>',
+                self.event_tag_release,
+            )
+            self.canvas_lbl.tag_bind(
+                canvasid,
+                '<B1-Motion>',
+                self.event_tag_motion,
+            )
 
     def update_label_config(self, name=None):
         """ Update `self.lbl_config` with values from the entries. """
@@ -547,11 +734,11 @@ class WinLabels(WinToplevelBase):
                     x_cfg
                 )
             )
-        if x > self.max_lbl_x:
+        if x > self.max_dot_x:
             raise ValueError(
                 'X position for {!r} must be less than {}: {}'.format(
                     name.title(),
-                    self.max_lbl_x,
+                    self.max_dot_x,
                     x_cfg,
                 )
             )
@@ -574,13 +761,11 @@ class WinLabels(WinToplevelBase):
                     y_cfg
                 )
             )
-        if y > self.max_lbl_y:
+        if y > self.max_dot_y:
             raise ValueError(
                 'Y position for {!r} must be less than {}: {}'.format(
                     name.title(),
-                    self.max_lbl_y,
+                    self.max_dot_y,
                     y_cfg,
                 )
             )
-
-
