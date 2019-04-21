@@ -53,19 +53,22 @@ Usage:
     tigertamer.py (-F | -h | -L | -v) [-D]
     tigertamer.py -f func [-e] [-s] [-D]
     tigertamer.py -g [-e] [-r] [-s] [-D]
-    tigertamer.py (-u | -U) [ARCHIVE_DIR] [-D]
+    tigertamer.py (-u | -U) [-a dir | ARCHIVE_FILE...] [-D]
     tigertamer.py [-g] (-p | -V) FILE... [-D]
+    tigertamer.py (-m | -M | -t | -T) FILE... [-D]
     tigertamer.py [FILE...] [-e] [-i dir...] [-I text...]
                   [-n] [-s] [-D]
     tigertamer.py [FILE...] [-e] [-i dir...] [-I text...]
                   [-o dir [-a dir]] [-s] [-D]
 
 Options:
-    ARCHIVE_DIR           : Directory to look for archive files.
+    ARCHIVE_FILE          : One or more archived file paths to unarchive.
     FILE                  : One or more CSV (.dat) files to parse,
                             or Tiger (.tiger) files to view with -V.
-    -a dir,--archive dir  : Directory for completed master files.
-                            Use - to disable archiving.
+    -a dir,--archive dir  : Directory for completed master files, or for
+                            unarchiving all files at once.
+                            Use - to disable archiving when converting
+                            files.
                             Disabled when printing to stdout.
     -D,--debug            : Show more info while running.
     -e,--extra            : Use extra data from Mozaik files.
@@ -73,6 +76,7 @@ Options:
     -f name, --func name  : Run a function from WinMain for debugging.
                             This automatically implies -g,--gui.
     -g,--gui              : Load the Tiger Tamer GUI.
+    -h,--help             : Show this help message.
     -I str,--IGNORE str   : One or more strings to ignore when looking
                             for mozaik files (applies to full file path).
     -i dir,--ignore dir   : One or more directories to ignore when looking
@@ -80,14 +84,20 @@ Options:
                             The output and archive directories are
                             included automatically.
     -L,--labelconfig      : Print label config and exit.
+    -M,--MASTERFILE       : Like -m, but separate into width files first.
+    -m,--masterfile       : Parse, split parts, combine parts, and then
+                            output another Mozaik master file (.dat) to
+                            stdout.
+    -n,--namesonly        : Just show which files would be generated.
     -o dir,--output dir   : Output directory.
                             Use - for stdout output.
-    -h,--help             : Show this help message.
-    -n,--namesonly        : Just show which files would be generated.
     -p,--preview          : Preview output for a Mozaik (.dat) file.
                             This will not create any Tiger (.tiger) files.
     -r,--run              : Automatically run with settings in config.
     -s,--nosplit          : Do not split parts into single line items.
+    -T,--TREE             : Like -t, but separate into width files first.
+                            This adjusts the tree to width-first.
+    -t,--tree             : Print parts in tree-form.
     -u,--unarchive        : Undo any archiving, if possible.
     -U,--UNARCHIVE        : Undo any archiving, and remove all output
                             files.

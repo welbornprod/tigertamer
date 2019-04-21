@@ -8,7 +8,6 @@
 from .common import (
     create_event_handler,
     handle_cb,
-    show_error,
     tk,
     ttk,
     WinToplevelBase,
@@ -364,9 +363,13 @@ class WinLabels(WinToplevelBase):
                 break
         else:
             # New item.
-            debug('New label: {}'.format(name))
-            d = {}
-            lblconfig.append((name, d))
+            if name not in available_labels:
+                self.show_error('\n\n'.join((
+                    'Not a valid label name: {}'.format(name),
+                    'Should be one of:',
+                    ', '.join(available_labels)
+                )))
+                return
         # Set config values if they are not empty.
         if fontsize and (int(fontsize) > 0):
             d['fontsize'] = fontsize
