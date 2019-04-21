@@ -105,7 +105,7 @@ def create_xml(mozfile, extra_data=False):
         '<?xml version="1.0" encoding="utf-8"?>',
         et_tostring(
             E.CutList(
-                *create_settings(mozfile.filename, extra_data=extra_data),
+                *create_settings(mozfile.filepath, extra_data=extra_data),
                 E.pieces(
                     *create_pieces(mozfile.parts, extra_data=extra_data),
                 ),
@@ -155,8 +155,8 @@ def create_pieces(mozparts, extra_data=False):
     )
 
 
-def create_settings(filename, extra_data=False):
-    tigername, _ = os.path.splitext(filename)
+def create_settings(filepath, extra_data=False):
+    tigername, _ = os.path.splitext(filepath)
 
     return (
         E.style(settings['style']),
@@ -243,8 +243,8 @@ class TigerFile(object):
             others are from the user's printStrings/labelField/labelStrings.
 
     """
-    def __init__(self, filename=None, parts=None):
-        self.filename = filename or None
+    def __init__(self, filepath=None, parts=None):
+        self.filepath = filepath or None
         self.parts = parts or []
         # Header values always added by tigerstop.
         self.header_ts = ['Quantity', 'Completed', 'Length']
@@ -258,51 +258,51 @@ class TigerFile(object):
         """ Format this TigerFile as a Colr when passed directly to Colr().
         """
         typename = C(type(self).__name__, 'blue')
-        filename = C(self.filename, 'cyan')
+        filepath = C(self.filepath, 'cyan')
         if not self.parts:
-            return C('{typ}(filename={filename!r}, parts={parts!r})'.format(
+            return C('{typ}(filepath={filepath!r}, parts={parts!r})'.format(
                 typ=typename,
-                filename=filename,
+                filepath=filepath,
                 parts=C(self.parts, 'cyan'),
             ))
         return C('\n  '.join((
             '{typ}(',
-            'filename={fname!r},',
+            'filepath={fname!r},',
             'parts=[',
             '{parts}',
             ']\n)'
         )).format(
             typ=typename,
-            filename=filename,
+            filepath=filepath,
             parts='\n  '.join(C(p) for p in self.parts),
         ))
 
     def __repr__(self):
         typename = type(self).__name__
         if not self.parts:
-            return '{typ}(filename={filename!r}, parts={parts!r})'.format(
+            return '{typ}(filepath={filepath!r}, parts={parts!r})'.format(
                 typ=typename,
-                filename=self.filename,
+                filepath=self.filepath,
                 parts=self.parts,
             )
         return '\n  '.join((
             '{typ}(',
-            'filename={fname!r},',
+            'filepath={fname!r},',
             'parts=[',
             '{parts}',
             ']\n)'
         )).format(
             typ=typename,
-            filename=self.filename,
+            filepath=self.filepath,
             parts='\n  '.join(str(p) for p in self.parts),
         )
 
     def __str__(self):
         partlen = len(self.parts)
         singleitem = partlen == 1
-        return '{}(filename={!r}, parts={})'.format(
+        return '{}(filepath={!r}, parts={})'.format(
             type(self).__name__,
-            self.filename,
+            self.filepath,
             '[{} {}{}]'.format(
                 partlen,
                 'part' if singleitem else 'parts',
@@ -330,16 +330,16 @@ class TigerFile(object):
         self.header.extend(self.header_user[skip:])
 
     @classmethod
-    def from_file(cls, filename):
-        with open(filename, 'rb') as f:
+    def from_file(cls, filepath):
+        with open(filepath, 'rb') as f:
             tf = cls.from_bytes(f.read())
-            tf.filename = filename
+            tf.filepath = filepath
         return tf
 
     @classmethod
-    def from_bytes(cls, b, filename=None):
+    def from_bytes(cls, b, filepath=None):
         """ Create a TigerFile from XML bytes (a .tiger file's content). """
-        tf = cls(filename=filename)
+        tf = cls(filepath=filepath)
         root = ElementTree.fromstring(b)
 
         tf._build_headers(root)
@@ -351,7 +351,7 @@ class TigerFile(object):
         """ Creates a TigerFile from a MozaikFile instance. """
         return cls.from_bytes(
             create_xml(mozfile).encode(),
-            filename=mozfile.filename,
+            filepath=mozfile.filepath,
         )
 
     def _parse_pieces(self, rootelem):
@@ -397,8 +397,8 @@ class TigerFile(object):
 
     def print(self):
         """ Print a console-friendly version of this TigerFile. """
-        if self.filename:
-            fname = C(self.filename, 'lightskyblue')
+        if self.filepath:
+            fname = C(self.filepath, 'lightskyblue')
         else:
             fname = C('Unknown TigerFile', 'red').join('<', '>')
 

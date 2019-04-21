@@ -6,11 +6,12 @@
 
     -Christopher Welborn 02-24-2019
 """
-
+import os
 import sys
 import unittest
 
 from colr import Colr as C
+from printdebug import DebugColrPrinter
 
 from ..lib.util.config import (
     NotSet,
@@ -19,7 +20,13 @@ from ..lib.util.parser import (
     MozaikMasterFile,
 )
 
-from ..test import data
+from ..test import (
+    data,
+)
+
+debugprinter = DebugColrPrinter()
+debugprinter.enable(bool(os.environ.get('TT_TEST_DEBUG', 0)))
+debug = debugprinter.debug
 
 
 def part_compare_fmt(a, b, mark_keys=None):
@@ -35,11 +42,13 @@ def part_compare_fmt(a, b, mark_keys=None):
             cols=maxwidth // 2,
         )
     ]
-    header = set(a.header)
-    header.update(set(b.header))
+    aheader = getattr(a, 'header', [])
+    header = set(aheader)
+    bheader = getattr(b, 'header', [])
+    header.update(set(bheader))
     fmt = '{key}={vala} {key}={valb}'
     for key in sorted(header):
-        if (key not in a.header) or (key not in b.header):
+        if (key not in aheader) or (key not in bheader):
             # Auto-mark missing header keys.
             mark_keys.add(key)
 
@@ -94,6 +103,8 @@ def part_diff(a, b):
     """ Compare two parts, and return a formatted str with the difference.
         If there is no difference, then empty str is returned.
     """
+    if not (a and b):
+        return part_compare_fmt(a, b)
     if a.header != b.header:
         return part_compare_fmt(a, b)
     mark_keys = set()
@@ -113,6 +124,7 @@ class MozaikMasterFileTests(unittest.TestCase):
     def setUp(self):
         """ Set up test data for MozaikMasterPartTests. """
         self.testdata = data.mozmasterfile
+        self.testdata_combined = data.mozmasterfile_combined
 
     def assertPartEqual(self, a, b, msg=None):
         """ Like assertEqual, but with better messages for MozaikParts. """
@@ -140,19 +152,34 @@ class MozaikMasterFileTests(unittest.TestCase):
                 break
         else:
             # One is a subset of the other.
-            diffindex = min(lena, lenb) - 1
-            parta = a[diffindex]
-            partb = b[diffindex]
+            diffindex = max(min(lena, lenb) - 1, 0)
+            try:
+                parta = a[diffindex]
+            except IndexError:
+                parta = None
+            try:
+                partb = b[diffindex]
+            except IndexError:
+                partb = None
             if lena > lenb:
                 diffmsg = 'First list is larger.'
-            elif lenb > lenb:
+            elif lenb > lena:
                 diffmsg = 'Second list is larger.'
+            else:
+                diffmsg = 'List lengths are the same.'
 
         lines = [
             str(C(msg or 'Lists are not equal.', 'red')),
         ]
         if desc:
             lines.append('   Description: {}'.format(C(desc, 'cyan')))
+        lines.append('\n'.join((
+            '      Length A: {}',
+            '      Length B: {}',
+        )).format(
+            C(lena, 'blue'),
+            C(lenb, 'blue')
+        ))
 
         lines.append('\n{}'.format(partlist_compare_fmt(a, b)))
         lines.append(
@@ -165,7 +192,7 @@ class MozaikMasterFileTests(unittest.TestCase):
 
     def test_parse_line(self):
         """ parse_line should create valid MozaikParts. """
-
+        debug()
         for line, cases in self.testdata.items():
             # Test without split parts.
             mfile = MozaikMasterFile.from_line(line, split_parts=False)
@@ -175,7 +202,8 @@ class MozaikMasterFileTests(unittest.TestCase):
                 msg='from_line(split_parts=False) failed to parse correctly.',
                 desc=cases['desc'],
             )
-
+            debug('Passed: {}'.format(C(repr(line), 'cyan')))
+            debug('No split:', cases['desc'], align=True)
             # Test with split parts.
             mfile = MozaikMasterFile.from_line(line, split_parts=True)
             self.assertPartListEqual(
@@ -184,6 +212,26 @@ class MozaikMasterFileTests(unittest.TestCase):
                 msg='from_line(split_parts=True) failed to parse correctly.',
                 desc=cases['desc'],
             )
+            debug('Passed: {}'.format(C(repr(line), 'cyan')))
+            debug('   Split:', cases['desc'], align=True)
+
+    def test_parse_line_combined(self):
+        """ parse_line should combine similar parts. """
+        debug()
+        for testitem in self.testdata_combined:
+            mfile = MozaikMasterFile.from_lines(
+                testitem.lines,
+                split_parts=True,
+                filepath='Test Data.dat',
+            )
+            mozfile = mfile.into_width_files()[0]
+            self.assertPartListEqual(
+                mozfile.parts,
+                testitem.expected,
+                msg='from_lines() failed to combine parts correctly.',
+                desc=testitem.desc,
+            )
+            debug('Passed: {}'.format(testitem.desc))
 
 
 if __name__ == '__main__':

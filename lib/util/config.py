@@ -126,7 +126,7 @@ def config_increment(**kwargs):
             )
 
     # Multithreaded Tkinter windows are not using 'globals' like they should.
-    return config_save(config)
+    return config_save(config, sub_dict_ok=True)
 
 
 def config_load():

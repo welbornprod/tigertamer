@@ -9,6 +9,8 @@ import csv
 import os
 import re
 import shutil
+import sys
+from collections import UserDict
 from contextlib import suppress
 
 from colr import (
@@ -31,6 +33,11 @@ colr_auto_disable()
 
 # Pattern to grab multiple cab quantities from a room/cab number.
 cab_count_pat = re.compile(r'R?\d{1,3}?\:?\d{1,3}?\((\d{1,3})\)')
+# Pattern to grab one or more quantities from a room/cab number.
+cab_multi_count_pat = re.compile(r'\((\d{1,3})\)')
+
+# Char for splitting/re-joining archive file paths.
+archive_split_char = '__'
 
 
 def archive_parent_file(datfile, archive_dir):
@@ -39,7 +46,7 @@ def archive_parent_file(datfile, archive_dir):
     """
     parentdir, parentname = os.path.split(datfile.parent_file)
     _, parentsubdir = os.path.split(parentdir)
-    newparentname = '_'.join((parentsubdir, parentname))
+    newparentname = archive_split_char.join((parentsubdir, parentname))
     archpath = os.path.join(archive_dir, newparentname)
     if not os.path.exists(datfile.parent_file):
         if os.path.exists(archpath):
@@ -92,14 +99,20 @@ def get_archive_info(datdir, archdir):
         raise ValueError('No files to unarchive.')
 
     relpathpcs = (
-        s.split('_', 1)
+        s.rsplit(archive_split_char, 1)
         for s in archfiles
     )
     relpaths = []
     datdirparent, datdirsub = os.path.split(datdir)
     if not datdirsub:
         datdirsub = datdirparent
-    for subdir, name in relpathpcs:
+
+    for relpathpc in relpathpcs:
+        try:
+            subdir, name = relpathpc
+        except ValueError:
+            debug_err('Not a valid archive file name: {!r}'.format(relpathpc))
+            continue
         if datdirsub.endswith(subdir):
             relpaths.append(name)
         else:
@@ -175,7 +188,7 @@ def get_tiger_files(outdir):
 
 
 def increment_file_path(path):
-    """ Turns file paths like: /dir/filename.ext into /dir/filename(2).ext
+    """ Turns file paths like: /dir/filepath.ext into /dir/filepath(2).ext
     """
     numpat = re.compile(r'.+(\(\d+\))\.\w{1,5}$')
     match = numpat.search(path)
@@ -225,12 +238,12 @@ def is_ignored_dir(dirpath, ignore_dirs=None, ignore_strs=None):
     return False
 
 
-def is_valid_dat_file(filename, _indent=''):
+def is_valid_dat_file(filepath, _indent=''):
     """ Returns True if this file has the proper column count for a .dat
         file.
     """
     validlen = len(MozaikMasterFile.header)
-    with open(filename, 'r') as f:
+    with open(filepath, 'r') as f:
         # read only the first line.
         for row in csv.reader([f.readline()]):
             collen = len(row)
@@ -240,18 +253,18 @@ def is_valid_dat_file(filename, _indent=''):
                         _indent,
                         validlen,
                         collen,
-                        filename
+                        filepath
                     )
                 )
                 return False
     return True
 
 
-def load_moz_file(filename, split_parts=True):
+def load_moz_file(filepath, split_parts=True):
     """ Loads a single MozaikMasterFile, and splits it into multiple Mozaik
         width files.
     """
-    master = MozaikMasterFile.from_file(filename, split_parts=split_parts)
+    master = MozaikMasterFile.from_file(filepath, split_parts=split_parts)
     debug('Creating width files from: {}'.format(master))
     return master.into_width_files()
 
@@ -365,7 +378,7 @@ def unarchive_file(src, dest):
             debug('Created directory: {}'.format(destdir))
     try:
         shutil.move(src, dest)
-    except OSError as ex:
+    except OSError:
         msg = '\n'.join((
             'Unable to unarchive/move file:',
             '{src}',
@@ -386,7 +399,7 @@ def write_tiger_file(
         `success_cb(mozfile, tigerpath)`
 
     """
-    tigerpath = os.path.join(outdir, mozfile.filename)
+    tigerpath = os.path.join(outdir, mozfile.filepath)
     use_err_cb = callable(error_cb)
     use_success_cb = callable(success_cb)
 
@@ -431,10 +444,18 @@ class MozaikMasterFile(object):
     header = ('count', 'width', 'length', 'type', 'no', 'extra_data')
     count = 0
 
-    def __init__(self, filename=None, parts=None):
-        self.filename = filename or None
+    def __init__(self, filepath=None, parts=None):
+        self.filepath = filepath or None
         self.parts = parts or []
         self.count = sum(p.count for p in self.parts)
+
+    def __bool__(self):
+        """ A MozaikMasterFile is truthy if it has parts. """
+        return bool(self.parts)
+
+    def __len__(self):
+        """ The length MozaikMasterFile is the length of it's parts. """
+        return len(self.parts)
 
     def __repr__(self):
         """ Stringify this MozaikMasterFile for debug printing. """
@@ -450,36 +471,48 @@ class MozaikMasterFile(object):
         return '\n'.join(lines)
 
     def __str__(self):
-        keys = 'count={s.count}, filename={s.filename!r},'.format(s=self)
+        keys = 'count={s.count}, filepath={s.filepath!r},'.format(s=self)
         return '{}({}):'.format(
             type(self).__name__,
             keys,
         )
 
     @classmethod
-    def from_file(cls, filename, split_parts=True):
+    def from_file(cls, filepath, split_parts=True):
         """ Creates a MozaikMasterFile, and loads/parses a file to
             populate it.
         """
         mp = cls()
-        mp.parse(filename, split_parts=split_parts)
+        mp.parse(filepath, split_parts=split_parts)
         return mp
 
     @classmethod
-    def from_line(cls, line, filename=None, split_parts=True):
+    def from_line(cls, line, filepath=None, split_parts=True):
         """ Parse a single line from a Mozaik .dat file into a
-            MozaikMasterFile with optional filename.
+            MozaikMasterFile with optional filepath.
         """
         parts = cls.parse_row(line.split(','), split_parts=split_parts)
-        return cls(filename=filename, parts=parts)
+        return cls(filepath=filepath, parts=parts)
 
-    def parse(self, filename, split_parts=True):
+    @classmethod
+    def from_lines(cls, lines, filepath=None, split_parts=True):
+        """ Parse a single line from a Mozaik .dat file into a
+            MozaikMasterFile with optional filepath.
+        """
+        parts = []
+        for line in lines:
+            parts.extend(
+                cls.parse_row(line.split(','), split_parts=split_parts)
+            )
+        return cls(filepath=filepath, parts=parts)
+
+    def parse(self, filepath, split_parts=True):
         """ Parses a Mozaik CSV (.dat) file, and populates the
             MozaikMasterFile class.
         """
-        debug('Parsing: {}'.format(filename))
-        self.filename = filename
-        with open(filename) as f:
+        debug('Parsing: {}'.format(filepath))
+        self.filepath = filepath
+        with open(filepath) as f:
             for row in csv.reader(f):
                 parts = self.parse_row(row, split_parts=split_parts)
                 self.count += sum(p.count for p in parts)
@@ -526,14 +559,14 @@ class MozaikMasterFile(object):
             })
             if filedata.get(part.width, None) is None:
                 # New width file.
-                filedata[part.width] = MozaikFile(self.filename, part.width)
+                filedata[part.width] = MozaikFile(self.filepath, part.width)
             # Append part to this width file.
             filedata[part.width].parts.append(newpart)
             filedata[part.width].count += newpart.count
 
         mozfiles = [filedata[width] for width in sorted(filedata)]
         for mozfile in mozfiles:
-            mozfile.parent_file = self.filename
+            mozfile.parent_file = self.filepath
             mozfile.combine_parts()
 
         mozfilecount = sum(mozfile.count for mozfile in mozfiles)
@@ -554,19 +587,36 @@ class MozaikMasterFile(object):
         """ Convert to csv file. """
         return '\n'.join(p.to_csv() for p in self.parts)
 
+    def tree(self):
+        """ Return a tree/dict of parts for this master file. """
+        tree = MozaikPartTree({}, label='room', filepath=self.filepath)
+        for part in self.parts:
+            parttree = part.tree()
+            tree.update(parttree)
+
+        return tree
+
 
 class MozaikFile(object):
     """ Holds a Mozaik file of a predetermined width. """
     header = ('count', 'length', 'type', 'no', 'extra_data')
     count = 0
 
-    def __init__(self, filename, width):
+    def __init__(self, filepath, width):
         """ Initialize a MozaikFile of a certain width from keys/values. """
         self.width = width or 0
-        self.filename = self.fix_filename(filename, width)
+        self.filepath = self.fix_filepath(filepath, width)
         self.parts = []
         # This is set by the parent 'MozaikMasterFile' that creates these.
         self.parent_file = None
+
+    def __bool__(self):
+        """ A MozaikFile is truthy if it has parts. """
+        return bool(self.parts)
+
+    def __len__(self):
+        """ The length MozaikFile is the length of it's parts. """
+        return len(self.parts)
 
     def __repr__(self):
         """ Stringify this MozaikFile for debug printing. """
@@ -584,7 +634,7 @@ class MozaikFile(object):
         keys = ', '.join((
             'count={s.count}',
             'width={s.width}',
-            'filename={s.filename!r}',
+            'filepath={s.filepath!r}',
         )).format(s=self)
         return '{}({}):'.format(
             type(self).__name__,
@@ -595,97 +645,46 @@ class MozaikFile(object):
         """ Combine parts that are the same, but have 2 line items for
             some reason.
         """
-        debug('Combining parts in: {}'.format(self))
-        count = 0
-
         # Look for single lines, with a matching multi line:
         # like: 1,5,TR,R1:1
         #       2,5,TR,R1:1(2)
         # and combine them into: 3,5,TR,R1:1(3)
-        for i, part in enumerate(self.parts[:]):
-            if '(' not in part.no:
-                continue
-            for j, otherpart in enumerate(self.parts[:]):
-                if not part.similar_part(otherpart):
-                    continue
-                # Found one.
-                newpart = part.copy()
-                newpart.count = part.count + otherpart.count
-                newpart.no = '{}({})'.format(
-                    trim_cab_count(newpart.no),
-                    newpart.count,
-                )
-                debug('Created combined part: {}'.format(newpart))
-                newpart.combined = True
-                self.parts[i] = newpart
-                self.parts[j] = None
-                count += 1
-                continue
-        try:
-            while self.parts:
-                self.parts.remove(None)
-        except ValueError:
-            # No more dead parts to remove.
-            pass
+        debug('Combining parts in: {}'.format(self))
+        length = len(self)
+        tree = self.tree()
+        self.parts = tree.to_mozaikparts()
+        debug('Parts combined: {}'.format(length - len(self)), align=True)
 
-        # Look for pure duplicates:
-        for i, part in enumerate(self.parts[:]):
-            for j, otherpart in enumerate(self.parts[:]):
-                if i == j:
-                    continue
-                if part == otherpart:
-                    newpart = part.copy()
-                    newpart.count += otherpart.count
-                    newpart.no = '{}({})'.format(
-                        trim_cab_count(otherpart.no),
-                        newpart.count,
-                    )
-                    debug('Combined simple part: {}'.format(newpart))
-                    debug('Duplicates: {}'.format(part), align=True)
-                    self.parts[i] = newpart
-                    self.parts[j] = None
-                    count += 1
-                    continue
-
-        try:
-            while self.parts:
-                self.parts.remove(None)
-        except ValueError:
-            # No more dead parts to remove.
-            pass
-
-        debug('Parts combined: {}'.format(count), align=True)
-
-    def fix_filename(self, filename, width):
+    def fix_filepath(self, filepath, width):
         """ Fix the file name to contain more information. """
-        jobname = self.job_name_from_path(filename)
+        jobname = self.job_name_from_path(filepath)
 
-        _, fname = os.path.split(filename)
+        _, fname = os.path.split(filepath)
         fname, _ = os.path.splitext(fname)
         fname = strip_words(
             fname,
             (
-                '\(Face Frames\)',
-                '3-4 Maple Board'
+                r'\(Face Frames\)',
+                r'3-4 Maple Board'
             )
         )
 
         if jobname and (not fname):
             # Managed to guess job name from dir.
-            if filename not in self.fix_filename.reported:
+            if filepath not in self.fix_filepath.reported:
                 debug_err(
                     'No good file name, using job name: {!r}'.format(jobname)
                 )
-                self.fix_filename.reported.add(filename)
+                self.fix_filepath.reported.add(filepath)
             fname = jobname
             jobname = None
         elif not (jobname or fname):
             # No good job name or dir name.
-            if filename not in self.fix_filename.reported:
+            if filepath not in self.fix_filepath.reported:
                 debug_err(
-                    'No good file name or job name: {}'.format(filename)
+                    'No good file name or job name: {}'.format(filepath)
                 )
-                self.fix_filename.reported.add(filename)
+                self.fix_filepath.reported.add(filepath)
             fname = 'Unknown Job'
             jobname = None
         if jobname:
@@ -694,7 +693,7 @@ class MozaikFile(object):
             fname = fname.strip()
         return '{}[{}in]{}'.format(fname or '', width, '.tiger')
 
-    fix_filename.reported = set()
+    fix_filepath.reported = set()
 
     @staticmethod
     def job_name_from_path(filepath):
@@ -704,18 +703,51 @@ class MozaikFile(object):
         words = ('cutlists', 'tigerstop')
         return strip_words(jobdir.lower(), words).strip().title()
 
+    def tree(self):
+        """ Return a tree/dict of parts for this file. """
+        tree = MozaikPartTree({}, label='room')
+        for part in self.parts:
+            parttree = part.tree()
+            tree.update(parttree)
+
+        return MozaikPartTree(
+            {self.width: tree},
+            label='width',
+            filepath=self.filepath,
+        )
+
 
 class MozaikMasterPart(object):
     """ Holds info about a single part to be cut. """
     header = MozaikMasterFile.header
 
+    # Corrections/replacements for certain values (for certain attributes).
+    value_map = {
+        'type': {
+            '{Drawer Front Size}': 'Drawer Front',
+        },
+    }
+
     def __init__(self, data):
+        # Set attributes based on the header.
         for field in self.header:
             setattr(self, field, None)
+
         try:
             # Dict of {field: value}?
             for k, v in data.items():
-                val = v
+                if k not in self.header:
+                    raise ValueError(
+                        'Initialized with unknown header: {!r}={!r}'.format(
+                            k,
+                            v,
+                        )
+                    )
+                replacements = self.value_map.get(k, None)
+                if replacements:
+                    val = self.value_map[k].get(v, v)
+                else:
+                    val = v
                 with suppress(AttributeError):
                     val = val.strip()
                 setattr(self, k, val)
@@ -778,6 +810,10 @@ class MozaikMasterPart(object):
         }
         return self.__class__(data)
 
+    def find_similar(self, parts):
+        """ Yield all similar parts to this one from the `parts` list. """
+        yield from (p for p in parts if self.similar_part(p))
+
     def fix_cab_count(self):
         """ Make sure multi-room/multi-cab parts have a correct count.
             For a single-room/single-cab part a count > 1 may be valid,
@@ -802,32 +838,43 @@ class MozaikMasterPart(object):
         # ...but it still may count the parts wrong:
         #   2,<width>,<length>,<type>,R1:1 R2:2(2),<extra>
         # This next bit of code fixes that when needed.
-        self.count = (
-            self.no.count(' ') +
-            self.no.count('&') +
-            self.get_cab_count(self.no, multi_allowed=True)
+        self.count = sum(
+            self.get_cab_count(cab)
+            for room in self.no.split(' ')
+            for cab in room.split('&')
         )
-        return None
+        return self.count
 
     @staticmethod
     def get_cab_count(cabno, multi_allowed=False):
         """ Parse out multiple cab counts from a `no` string (like: R1:1(2)).
             Returns the number inside the parenthesis or 1.
         """
-        countmatch = cab_count_pat.match(cabno)
-        if (countmatch is not None) and countmatch.groups():
-            cabcount = int(countmatch.groups()[0])
+        allcounts = cab_multi_count_pat.findall(cabno)
+        if allcounts:
+            cabcount = sum(int(s) for s in allcounts)
             debug(
-                'Found multi count: {}'.format(cabcount),
-                align=True,
+                'Found multi {}: {} in {!r}'.format(
+                    'count' if len(allcounts) == 1 else 'counts',
+                    cabcount,
+                    cabno,
+                )
             )
             return cabcount
+
         if ('(' in cabno):
             if ((' ' in cabno) or ('&' in cabno)) and multi_allowed:
                 debug('Missed cab count for multi-room: {!r}'.format(cabno))
             else:
-                debug_err('Missed cab count?: {!r}'.format(cabno))
-                debug_err('<-- get_cab_count() called from.', level=1)
+                debug_err(
+                    'Missed cab count?: {!r}'.format(cabno),
+                    file=sys.stderr,
+                )
+                debug_err(
+                    '<-- get_cab_count() called from.',
+                    level=1,
+                    file=sys.stderr,
+                )
         return 1
 
     def has_multi(self):
@@ -865,7 +912,6 @@ class MozaikMasterPart(object):
             else:
                 if getattr(self, field) != getattr(other, field):
                     return False
-
         debug('Same part:')
         debug(str(self), align=True)
         debug(str(other), align=True)
@@ -917,6 +963,7 @@ class MozaikMasterPart(object):
             # Parse multiple cab nos.
             debug('Multiple cabs: {}'.format(cabs))
             for cab in cabs.split('&'):
+                debug('Parsing cab part: {!r}'.format(cab))
                 part = roompart.copy()
                 part.no = ':'.join((roomno, cab))
                 part.count = self.get_cab_count(cab)
@@ -976,7 +1023,288 @@ class MozaikMasterPart(object):
             for field in self.header
         )
 
+    def tree(self):
+        """ Return this mozaik master part in tree-style:
+                {
+                    width: {
+                        room: {
+                            cab_no: {
+                                part_type: {
+                                    extra_data: {
+                                        length: count
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+        """
+        tree = {}
+        for part in self.split_parts():
+            # room, cab, width, length, extra, part
+            room, cab = part.no.split(':')
+            cab = trim_cab_count(cab)
+            tree.setdefault(
+                room,
+                MozaikPartTree({}, label='cab')
+            )
+            tree[room].setdefault(
+                cab,
+                MozaikPartTree({}, label='width')
+            )
+            tree[room][cab].setdefault(
+                part.width,
+                MozaikPartTree({}, label='length')
+            )
+            w = part.width
+            tree[room][cab][w].setdefault(
+                part.length,
+                MozaikPartTree({}, label='extra_data')
+            )
+            tree[room][cab][w][part.length].setdefault(
+                part.extra_data,
+                MozaikPartTree({}, label='type')
+            )
+            tree[room][cab][w][part.length][part.extra_data].setdefault(
+                part.type,
+                0
+            )
+            tree[room][cab][w][part.length][part.extra_data][part.type] += (
+                part.count
+            )
+
+        return MozaikPartTree(tree, label='room')
+
 
 class MozaikPart(MozaikMasterPart):
     """ A part with a width that depends on the MozaikFile's width. """
     header = MozaikFile.header
+
+    def __init__(self, data):
+        super().__init__(data)
+
+    def tree(self):
+        """ Return this mozaik part in tree-style:
+                {
+                    room: {
+                        cab_no: {
+                            part_type: {
+                                extra_data: {
+                                    length: count
+                                }
+                            }
+                        }
+                    }
+                }
+        """
+        tree = {}
+        for part in self.split_parts():
+            # room, cab, width, length, extra, part
+            room, cab = part.no.split(':')
+            cab = trim_cab_count(cab)
+            tree.setdefault(
+                room,
+                MozaikPartTree({}, label='cab')
+            )
+            tree[room].setdefault(
+                cab,
+                MozaikPartTree({}, label='length')
+            )
+            tree[room][cab].setdefault(
+                part.length,
+                MozaikPartTree({}, label='extra_data')
+            )
+            tree[room][cab][part.length].setdefault(
+                part.extra_data,
+                MozaikPartTree({}, label='type')
+            )
+            tree[room][cab][part.length][part.extra_data].setdefault(
+                part.type,
+                0
+            )
+            tree[room][cab][part.length][part.extra_data][part.type] += (
+                part.count
+            )
+
+        return MozaikPartTree(tree, label='room')
+
+
+class MozaikPartTree(UserDict):
+    # Whether to print labels when printing the tree.
+    print_labels = True
+
+    level_colors = {
+        0: {'fore': 'blue', 'style': 'bright'},
+        1: {'fore': 'blue'},
+        2: {'fore': 'cyan'},
+        3: {'fore': 'green'},
+        4: {'fore': 'lightblue'},
+        5: {'fore': 'yellow'},
+        6: {'fore': 'magenta'},
+    }
+    level_colors_len = len(level_colors)
+
+    def __init__(self, data, label=None, filepath=None):
+        self.data = dict(data) or {}
+        self.label = str(label) if label else None
+        self.filepath = (filepath or getattr(data, 'filepath', None)) or None
+
+    def __bool__(self):
+        return bool(self.data)
+
+    def __repr__(self):
+        return '\n'.join((
+            '{typ}(',
+            '  data={s.data!r}',
+            '  label={s.label!r}',
+            '  filepath={s.filepath!r}',
+            ')',
+        )).format(typ=type(self).__name__, s=self)
+
+    def __str__(self):
+        return repr(self)
+
+    @classmethod
+    def color_args(cls, index):
+        return cls.level_colors[index % cls.level_colors_len]
+
+    @classmethod
+    def format_label(cls, item, default='None'):
+        """ Format a label for printing, if it hasn't been printed yet. """
+        if not cls.print_labels:
+            return ''
+        return '{}: '.format(
+            C(cls.get_label(item, default=default), 'dimgrey')
+        )
+
+    @classmethod
+    def get_label(cls, item, default='None'):
+        """ If the item has a `label` attribute, return it.
+            Otherwise, return a default value.
+        """
+        label = getattr(item, 'label', None)
+        if not label:
+            return default
+        return label
+
+    @classmethod
+    def iter_lines(cls, d):
+        """ Iterate over master file lines created from this tree. """
+        for partinfo in cls.iter_part_info(d):
+            # count, width, length, type, no, extra_data
+            line = ','.join((
+                str(partinfo['count']),
+                partinfo['width'],
+                partinfo['length'],
+                partinfo['type'],
+                partinfo['no'],
+                partinfo['extra_data'],
+            ))
+            yield line
+
+    @classmethod
+    def iter_part_info(cls, d):
+        partinfo = {}
+        for value in cls.iter_tree(d):
+            if value is None:
+                # One complete part has been yielded.
+                no = '{}:{}'.format(partinfo['room'], partinfo['cab'])
+                if partinfo['count'] > 1:
+                    no = '{}({})'.format(no, partinfo['count'])
+                # count, width, length, type, no, extra_data
+                yield {
+                    'count': str(partinfo['count']),
+                    'width': partinfo['width'],
+                    'length': partinfo['length'],
+                    'type': partinfo['type'],
+                    'no': no,
+                    'extra_data': partinfo['extra_data'],
+                }
+                continue
+            _, label, val = value
+            partinfo[label] = val or ''
+
+    @classmethod
+    def iter_tree(cls, d, level=0):
+        for k, v in d.items():
+            if not isinstance(v, (cls, dict)):
+                # End of the nests, just a key/value pair.
+                label = cls.get_label(d)
+                yield level, label, k
+                yield level, 'count', v
+                yield None
+                continue
+            label = cls.get_label(d)
+            yield level, label, k
+            yield from cls.iter_tree(v, level=level + 1)
+
+    @classmethod
+    def merge_dicts(cls, d1, d2):
+        notset = object()
+        d = {k: v for k, v in d1.items()}
+
+        for k, v in d2.items():
+            if d.get(k, notset) is notset:
+                d[k] = d2[k]
+                continue
+            if isinstance(v, (cls, dict)):
+                d[k] = cls(
+                    cls.merge_dicts(d[k], d2[k]),
+                    label=getattr(d[k], 'label', None),
+                )
+            elif isinstance(v, (float, int)):
+                d[k] += v
+            else:
+                d[k] = [d[k]]
+                d[k].append(v)
+        return d
+
+    def print(self):
+        self.labels_printed = set()
+        if self.filepath:
+            print('{}:'.format(C(self.filepath, **self.color_args(0))))
+            level = 1
+        else:
+            level = 0
+        self.print_tree(self, level=level)
+
+    @classmethod
+    def print_tree(cls, d, level=0):
+        for value in cls.iter_tree(d):
+            if value is None:
+                continue
+            lvl, lbl, val = value
+            indent = '    ' * lvl
+            end = '\n'
+            lblfmt = '{}: '.format(C(lbl.title(), 'dimgrey'))
+            valfmt = C(val or 'None', **cls.color_args(lvl))
+            if lbl == 'type':
+                end = ': '
+            elif lbl == 'count':
+                indent = ''
+                lblfmt = ''
+                valfmt = C(val or 0, **cls.color_args(lvl + 1))
+            print(
+                '{}{}{}'.format(
+                    indent,
+                    lblfmt,
+                    valfmt,
+                ),
+                end=end,
+            )
+
+    def to_lines(self):
+        """ Convert this MozaikPartTree back into master file lines """
+        return list(self.iter_lines(self))
+
+    def to_mozaikparts(self):
+        """ Convert this MozaikPartTree back into a list of MozaikParts. """
+        parts = []
+        for d in self.iter_part_info(self):
+            d.pop('width')
+            parts.append(MozaikPart(d))
+        return parts
+
+    def update(self, data):
+        """ Merge `data` into `self.data`. """
+        self.data = self.merge_dicts(self.data, data)

@@ -570,7 +570,7 @@ class WinMain(tk.Tk):
                 )
             except Exception as ex:
                 print_err('Error writing tiger file: {}\n{}'.format(
-                    mozfile.filename,
+                    mozfile.filepath,
                     ex
                 ))
                 add_error_file(mozfile, ex)
@@ -589,10 +589,10 @@ class WinMain(tk.Tk):
         self.show_report(
             parent_files=parentfiles,
             error_files=[
-                (mozfile.filename, msg)
+                (mozfile.filepath, msg)
                 for mozfile, msg in sorted(
                     error_files,
-                    key=lambda tup: tup[0].filename
+                    key=lambda tup: tup[0].filepath
                 )
             ],
             success_files=[
@@ -724,7 +724,7 @@ class WinMain(tk.Tk):
         """ Handles menu->Unarchive and Remove Tiger Files """
         return self.cmd_menu_unarchive(remove_tiger_files=True)
 
-    def cmd_menu_viewer(self, filenames=None, preview_files=None):
+    def cmd_menu_viewer(self, filepaths=None, preview_files=None):
         """ Handles menu->Tiger Viewer click. """
         self.enable_interface(False)
         self.win_viewer = WinViewer(
@@ -735,7 +735,7 @@ class WinMain(tk.Tk):
             destroy_cb=lambda: self.enable_interface(True),
             dat_dir=self.entry_dat.get(),
             tiger_dir=self.entry_tiger.get(),
-            filenames=filenames,
+            filepaths=filepaths,
             preview_files=preview_files,
         )
         return True

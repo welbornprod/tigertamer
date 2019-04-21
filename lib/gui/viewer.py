@@ -10,7 +10,6 @@ from .common import (
     create_event_handler,
     filedialog,
     handle_cb,
-    show_error,
     show_question,
     tk,
     trim_file_path,
@@ -28,9 +27,6 @@ from ..util.format import (
 from ..util.logger import (
     debug,
 )
-from ..util.parser import (
-    MozaikMasterFile,
-)
 from ..util.preview import (
     LargeFileError,
     TigerFiles,
@@ -42,14 +38,14 @@ class WinViewer(WinToplevelBase):
     def __init__(
             self, *args,
             settings, destroy_cb, dat_dir, tiger_dir,
-            filenames=None, preview_files=None,
+            filepaths=None, preview_files=None,
             **kwargs):
         self.settings = settings
         self.destroy_cb = destroy_cb
         self.dat_dir = dat_dir
         self.tiger_dir = tiger_dir
-        # The `filenames` arg is handled at the end of __init__.
-        self.filenames = []
+        # The `filepaths` arg is handled at the end of __init__.
+        self.filepaths = []
         super().__init__(*args, **kwargs)
         self.debug_settings()
 
@@ -253,12 +249,12 @@ class WinViewer(WinToplevelBase):
         # Build default tab.
         self.build_tab()
         # Open file passed in with kwargs?
-        if filenames:
-            self.after_idle(self.cmd_btn_open, filenames)
+        if filepaths:
+            self.after_idle(self.cmd_btn_open, filepaths)
         elif preview_files:
             self.after_idle(self.preview_files, preview_files)
 
-    def build_tab(self, filename=None):
+    def build_tab(self, filepath=None):
         frm_view = ttk.Frame(
             master=self.notebook,
             padding='2 2 2 2',
@@ -327,7 +323,7 @@ class WinViewer(WinToplevelBase):
         lbl_view = ttk.Label(
             master=frm_view,
             foreground='#6C6C6C',
-            text=filename,
+            text=filepath,
         )
         lbl_view.pack(
             side=tk.BOTTOM,
@@ -341,9 +337,9 @@ class WinViewer(WinToplevelBase):
         self.lbl_views.append(lbl_view)
         self.tree_views.append(tree_view)
 
-        if filename:
+        if filepath:
             # Use short file name for tab text.
-            fname = os.path.split(filename)[-1]
+            fname = os.path.split(filepath)[-1]
             text = os.path.splitext(fname)[0]
         else:
             text = None
@@ -363,7 +359,7 @@ class WinViewer(WinToplevelBase):
 
     def cmd_btn_close(self):
         """ Close the currently selected tab. """
-        if not self.filenames:
+        if not self.filepaths:
             self.show_error('No files to close.')
             return
         currentid = self.notebook.select()
@@ -373,36 +369,36 @@ class WinViewer(WinToplevelBase):
     def cmd_btn_exit(self):
         return self.destroy()
 
-    def cmd_btn_open(self, filenames=None):
+    def cmd_btn_open(self, filepaths=None):
         """ Pick a file with a Tk file dialog, and open it. """
-        filenames = filenames or self.dialog_files(
+        filepaths = filepaths or self.dialog_files(
             initialdir=self.tiger_dir,
             filetypes=(('Tiger Files', '*.tiger'), ),
         )
-        if not filenames:
+        if not filepaths:
             return
-        for filename in filenames:
-            if not os.path.exists(filename):
-                self.show_error('File does not exist:\n{}'.format(filename))
+        for filepath in filepaths:
+            if not os.path.exists(filepath):
+                self.show_error('File does not exist:\n{}'.format(filepath))
                 return
             try:
-                existingindex = self.filenames.index(filename)
+                existingindex = self.filepaths.index(filepath)
             except ValueError:
                 pass
             else:
                 # Remove the existing tab to reload this file.
                 self.remove_tab(existingindex)
 
-        return self.view_files(filenames)
+        return self.view_files(filepaths)
 
     def cmd_btn_preview(self):
-        filenames = self.dialog_files(
+        filepaths = self.dialog_files(
             initialdir=self.dat_dir,
             filetypes=(('Mozaik Files', '*.dat'), ),
         )
-        if not filenames:
+        if not filepaths:
             return
-        return self.preview_files(filenames)
+        return self.preview_files(filepaths)
 
     def destroy(self):
         debug('Saving gui-viewer config...')
@@ -421,13 +417,13 @@ class WinViewer(WinToplevelBase):
         """ Use tk.filedialog.askopenfiles(), and return the result. """
         self.attributes('-topmost', 0)
         self.withdraw()
-        filenames = filedialog.askopenfilenames(
+        filepaths = filedialog.askopenfilenames(
             initialdir=initialdir,
             filetypes=filetypes,
         )
         self.attributes('-topmost', 1)
         self.deiconify()
-        return filenames
+        return filepaths
 
     def enable_close(self, enabled):
         state = tk.NORMAL if enabled else tk.DISABLED
@@ -468,20 +464,20 @@ class WinViewer(WinToplevelBase):
             value = '{:0.2f}'.format(float(value))
         return str(value)
 
-    def preview_files(self, filenames):
+    def preview_files(self, filepaths):
         """ Preview Mozaik files (.dat), selected with `cmd_btn_preview`, or
             passed in through `self.__init__(preview_files=..)`.
         """
-        if not filenames:
+        if not filepaths:
             return
         # Clear all tabs.
         self.clear_tabs()
 
-        for filename in filenames:
+        for filepath in filepaths:
             try:
-                check_file(filename)
+                check_file(filepath)
             except FileNotFoundError:
-                self.show_error('File does not exist:\n{}'.format(filename))
+                self.show_error('File does not exist:\n{}'.format(filepath))
                 return
             except LargeFileError as ex:
                 msg = '\n'.join((
@@ -494,7 +490,7 @@ class WinViewer(WinToplevelBase):
                     return
             # TODO: Show a 'busy' window while working on the parts,
             #       and use the callback from view_masterfiles to remove it.
-            for tigerfile in TigerFiles.from_file(filename, split_parts=True):
+            for tigerfile in TigerFiles.from_file(filepath, split_parts=True):
                 self.view_tigerfile(tigerfile)
 
     def remove_tab(self, tabid):
@@ -504,16 +500,16 @@ class WinViewer(WinToplevelBase):
         except ValueError:
             # Tab id str.
             tabid = self.notebook.index(tabid)
-        if tabid == 0 and not self.filenames:
+        if tabid == 0 and not self.filepaths:
             # Can't remove the default tab.
             debug('Not removing the default tab.')
             return
         # Normal index
         self.notebook.forget(tabid)
-        self.filenames.pop(tabid)
+        self.filepaths.pop(tabid)
         self.lbl_views.pop(tabid)
         self.tree_views.pop(tabid)
-        if not self.filenames:
+        if not self.filepaths:
             # Rebuild the default tab.
             self.build_tab()
             self.enable_close(False)
@@ -528,25 +524,25 @@ class WinViewer(WinToplevelBase):
         self.deiconify()
         return ret
 
-    def view_files(self, filenames):
-        for filename in filenames:
-            self.view_tigerfile(TigerFile.from_file(filename))
+    def view_files(self, filepaths):
+        for filepath in filepaths:
+            self.view_tigerfile(TigerFile.from_file(filepath))
 
     def view_tigerfile(self, tigerfile):
         """ Load TigerFile instance parts into a new tab. """
-        if self.filenames:
+        if self.filepaths:
             # Adding another file.
-            tree_view = self.build_tab(filename=tigerfile.filename)
+            tree_view = self.build_tab(filepath=tigerfile.filepath)
         else:
             # Using the default (empty) tree_view.
             tree_view = self.tree_views[0]
             lbl_view = self.lbl_views[0]
-            lbl_view.configure(text=tigerfile.filename)
-            fname = os.path.split(tigerfile.filename)[-1]
+            lbl_view.configure(text=tigerfile.filepath)
+            fname = os.path.split(tigerfile.filepath)[-1]
             fname = os.path.splitext(fname)[0]
             self.notebook.tab(0, text=fname)
 
-        self.filenames.append(tigerfile.filename)
+        self.filepaths.append(tigerfile.filepath)
 
         for i, part in enumerate(tigerfile.parts):
             # Get raw part values.

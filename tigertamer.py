@@ -65,6 +65,7 @@ from lib.gui.main import (
     load_gui,
 )
 from lib.util.parser import (
+    MozaikMasterFile,
     create_xml,
     get_archive_info,
     get_tiger_files,
@@ -88,19 +89,22 @@ USAGESTR = """{versionstr}
         {script} (-F | -h | -L | -v) [-D]
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
-        {script} (-u | -U) [ARCHIVE_DIR] [-D]
+        {script} (-u | -U) [-a dir | ARCHIVE_FILE...] [-D]
         {script} [-g] (-p | -V) FILE... [-D]
+        {script} (-m | -M | -t | -T) FILE... [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
                       [-n] [-s] [-D]
         {script} [FILE...] [-e] [-i dir...] [-I text...]
                       [-o dir [-a dir]] [-s] [-D]
 
     Options:
-        ARCHIVE_DIR           : Directory to look for archive files.
+        ARCHIVE_FILE          : One or more archived file paths to unarchive.
         FILE                  : One or more CSV (.dat) files to parse,
                                 or Tiger (.tiger) files to view with -V.
-        -a dir,--archive dir  : Directory for completed master files.
-                                Use - to disable archiving.
+        -a dir,--archive dir  : Directory for completed master files, or for
+                                unarchiving all files at once.
+                                Use - to disable archiving when converting
+                                files.
                                 Disabled when printing to stdout.
         -D,--debug            : Show more info while running.
         -e,--extra            : Use extra data from Mozaik files.
@@ -108,6 +112,7 @@ USAGESTR = """{versionstr}
         -f name, --func name  : Run a function from WinMain for debugging.
                                 This automatically implies -g,--gui.
         -g,--gui              : Load the Tiger Tamer GUI.
+        -h,--help             : Show this help message.
         -I str,--IGNORE str   : One or more strings to ignore when looking
                                 for mozaik files (applies to full file path).
         -i dir,--ignore dir   : One or more directories to ignore when looking
@@ -115,14 +120,20 @@ USAGESTR = """{versionstr}
                                 The output and archive directories are
                                 included automatically.
         -L,--labelconfig      : Print label config and exit.
+        -M,--MASTERFILE       : Like -m, but separate into width files first.
+        -m,--masterfile       : Parse, split parts, combine parts, and then
+                                output another Mozaik master file (.dat) to
+                                stdout.
+        -n,--namesonly        : Just show which files would be generated.
         -o dir,--output dir   : Output directory.
                                 Use - for stdout output.
-        -h,--help             : Show this help message.
-        -n,--namesonly        : Just show which files would be generated.
         -p,--preview          : Preview output for a Mozaik (.dat) file.
                                 This will not create any Tiger (.tiger) files.
         -r,--run              : Automatically run with settings in config.
         -s,--nosplit          : Do not split parts into single line items.
+        -T,--TREE             : Like -t, but separate into width files first.
+                                This adjusts the tree to width-first.
+        -t,--tree             : Print parts in tree-form.
         -u,--unarchive        : Undo any archiving, if possible.
         -U,--UNARCHIVE        : Undo any archiving, and remove all output
                                 files.
@@ -152,8 +163,7 @@ def main(argd):
     )
     archdir = (
         argd['--archive'] or
-        config_get('archive_dir', './tigertamer_archive') or
-        argd['ARCHIVE_DIR']  # Only valid with -u or -U.
+        config_get('archive_dir', './tigertamer_archive')
     )
     ignore_dirs = set(config_get('ignore_dirs', []))
     ignore_dirs.update(set(argd['--ignore']))
@@ -214,20 +224,29 @@ def main(argd):
         # List label config being used.
         return list_labelconfig()
 
+    if argd['--masterfile'] or argd['--MASTERFILE']:
+        return view_lines_files(
+            argd['FILE'],
+            separate_widths=argd['--MASTERFILE']
+        )
+
     if argd['--preview']:
         # Preview a .dat file as a .tiger file.
         return preview_files(argd['FILE'])
+
+    if argd['--tree'] or argd['--TREE']:
+        return view_tree_files(argd['FILE'], separate_widths=argd['--TREE'])
 
     if argd['--view']:
         # View a tiger file.
         return view_tigerfiles(argd['FILE'])
 
     if argd['--unarchive'] or argd['--UNARCHIVE']:
-        if not options_are_set(inpaths, archdir):
+        if not (argd['ARCHIVE_FILE'] or options_are_set(inpaths, archdir)):
             raise InvalidConfig(
                 '.dat dir and archive dir must be set in config.'
             )
-        errs = unarchive(inpaths[0], archdir)
+        errs = unarchive(inpaths[0], archdir, filepaths=argd['ARCHIVE_FILE'])
         if argd['--unarchive']:
             return errs
         if not options_are_set(outdir):
@@ -318,7 +337,7 @@ def handle_moz_file(
         mozfile, outdir,
         archive_dir=None, names_only=False, extra_data=False):
     """ Handle the processing of one MozaikFile. """
-    tigerpath = os.path.join(outdir, mozfile.filename)
+    tigerpath = os.path.join(outdir, mozfile.filepath)
 
     if names_only:
         print(tigerpath)
@@ -400,16 +419,34 @@ def remove_tiger_files(outdir):
     return errs
 
 
-def unarchive(datdir, archdir):
+def unarchive(datdir, archdir=None, filepaths=None):
     """ Unarchive all dat files in `archdir`, and put them in `datdir`. """
+    if not (archdir or filepaths):
+        print_err('No file paths or archive directory specified!')
+        return 1
+
     try:
+        # Known archived files.
         files = get_archive_info(datdir, archdir)
     except (OSError, ValueError) as ex:
         print_err(ex)
         return 1
+    if filepaths:
+        filepath_errs = 0
+        srcfiles = [src for src, _ in files]
+        for filepath in filepaths:
+            if filepath not in srcfiles:
+                print_err('Not an archived file: {}'.format(filepath))
+                filepath_errs += 1
+        if filepath_errs:
+            return filepath_errs
+
     errs = 0
     success = 0
     for src, dest in files:
+        if filepaths and (src not in filepaths):
+            debug('Archive file not selected: {}'.format(src))
+            continue
         try:
             finalpath = unarchive_file(src, dest)
         except OSError as ex:
@@ -430,6 +467,36 @@ def unarchive(datdir, archdir):
     return errs
 
 
+def view_lines_file(filepath, separate_widths=False):
+    """ Parse a master file, with part splitting/combining, and then
+        print it out.
+    """
+    masterfile = MozaikMasterFile.from_file(filepath, split_parts=True)
+    if separate_widths:
+        mozfiles = masterfile.into_width_files()
+        for mozfile in mozfiles:
+            tree = mozfile.tree()
+            for line in tree.to_lines():
+                print(line)
+        return 0 if mozfiles else 1
+
+    # Whole master file.
+    tree = masterfile.tree()
+    for line in tree.to_lines():
+        print(line)
+    return 0 if tree else 1
+
+
+def view_lines_files(filepaths, separate_widths=False):
+    """ Parse several master files, with part splitting/combining, and then
+        print them out.
+    """
+    return sum(
+        view_lines_file(s, separate_widths=separate_widths)
+        for s in filepaths
+    )
+
+
 def view_tigerfile(filepath):
     """ View a single tiger file in the console.
         Returns an exit status code.
@@ -447,6 +514,29 @@ def view_tigerfiles(filepaths):
         Returns an exit status code.
     """
     return sum(view_tigerfile(s) for s in filepaths)
+
+
+def view_tree_file(filepath, separate_widths=False):
+    """ View a Mozaik file as a tree of parts. """
+    masterfile = MozaikMasterFile.from_file(filepath, split_parts=True)
+    if separate_widths:
+        mozfiles = masterfile.into_width_files()
+        for mozfile in mozfiles:
+            tree = mozfile.tree()
+            tree.print()
+        return 0 if mozfiles else 1
+    # Whole master file.
+    tree = masterfile.tree()
+    tree.print()
+    return 0 if tree else 1
+
+
+def view_tree_files(filepaths, separate_widths=False):
+    """ View multiple Mozaik files as a tree of parts. """
+    return sum(
+        view_tree_file(s, separate_widths=separate_widths)
+        for s in filepaths
+    )
 
 
 class InvalidArg(ValueError):
