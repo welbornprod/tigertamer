@@ -20,8 +20,6 @@ from ..util.parser import (
 from .common import (
     create_event_handler,
     handle_cb,
-    show_error,
-    show_question,
     tk,
     trim_file_path,
     ttk,
@@ -188,12 +186,10 @@ class WinUnarchive(WinToplevelBase):
                 for src, dest in get_archive_info(self.dat_dir, self.arch_dir)
             }
         except (OSError, ValueError) as ex:
-            show_error(ex)
-            self.destroy()
-            return
+            return self.show_error(ex, fatal=True)
 
         # Show this window since we have files to display.
-        self.wm_deiconify()
+        self.deiconify()
         for src in sorted(self.archive_info):
             self.tree_files.insert(
                 '',
@@ -222,7 +218,7 @@ class WinUnarchive(WinToplevelBase):
 
         selected = self.tree_files.selection()
         if not selected:
-            show_error('No archive files are selected.')
+            self.show_error('No archive files are selected.')
             return False
 
         # Files that will be unarchived
@@ -278,7 +274,7 @@ class WinUnarchive(WinToplevelBase):
                 for s, _ in files
             )
         )
-        return show_question(
+        return self.show_question(
             msg,
             title='Unarchive {} {}?'.format(filelen, plural)
         )

@@ -241,6 +241,18 @@ class WinToplevelBase(tk.Toplevel):
         else:
             self.lift()
 
+    def show_question(self, msg, title=None):
+        """ Show a tkinter askyesno dialog, but make sure this window is
+            out of the way.
+        """
+        old_topmost = self.attributes('-topmost')
+        self.attributes('-topmost', 0)
+        self.lower()
+        ans = show_question(msg, title=title)
+        self.attributes('-topmost', old_topmost)
+        self.lift()
+        return ans
+
 
 # Use TkErrorLogger
 tk.CallWrapper = TkErrorLogger

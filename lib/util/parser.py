@@ -81,14 +81,13 @@ def archive_parent_file(datfile, archive_dir):
     return remove_dir_if_empty(parentdir)
 
 
-def get_archive_info(datdir, archdir):
+def get_archive_info(datdir, archdir, listdir=os.listdir):
     """ Get all file paths in the archive directory, and where they would
         be restored to.
         Returns [(archivefile, restoretofile), ...]
     """
     try:
-        archfiles = os.listdir(archdir)
-        origpaths = (os.path.join(archdir, s) for s in archfiles)
+        archfiles = listdir(archdir)
     except OSError as ex:
         raise OSError('Unable to unarchive files!: ({}) {}'.format(
             type(ex).__name__,
@@ -98,6 +97,10 @@ def get_archive_info(datdir, archdir):
     if not archfiles:
         raise ValueError('No files to unarchive.')
 
+    # TODO: This currently doesn't handle mixed-version archive files.
+    #       The presence of one bad archive file ruins the whole thing
+    #       because of the `zip(origpaths, destpaths)` call at the end.
+    origpaths = (os.path.join(archdir, s) for s in archfiles)
     relpathpcs = (
         s.rsplit(archive_split_char, 1)
         for s in archfiles
