@@ -1254,9 +1254,6 @@ class MozaikPartTree(UserDict):
                 )
             elif isinstance(v, (float, int)):
                 d[k] += v
-            else:
-                d[k] = [d[k]]
-                d[k].append(v)
         return d
 
     def print(self):
