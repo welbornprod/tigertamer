@@ -15,6 +15,7 @@ from tkinter.font import Font  # noqa
 from ..util.logger import (
     debug,
     debugprinter,
+    debug_err,
     debug_exc,
     debug_obj,
     print_err,
@@ -168,12 +169,11 @@ class TkErrorLogger(object):
             raise
         except Exception as ex:
             # Log the message, and show an error dialog.
-            print_err('GUI Error: ({})'.format(type(ex).__name__))
+            print_err('GUI Error: ({})'.format(
+                type(ex).__name__,
+            ))
             debug_exc()
-            messagebox.showerror(
-                title='{} - Error'.format(NAME),
-                message=str(ex),
-            )
+            show_error(ex)
             raise
 
 
@@ -218,14 +218,28 @@ class WinToplevelBase(tk.Toplevel):
         """ Shortcut for self.debug_attr('settings'). """
         return self.debug_attr('settings', level=level + 1)
 
-    def show_error(self, msg):
-        """ Use show_error, but make sure this window is out of the way. """
+    def show_error(self, msg, fatal=False):
+        """ Use show_error, but make sure this window is out of the way.
+            If `fatal` is truthy, call `self.destroy()` afterwards.
+        """
         old_topmost = self.attributes('-topmost')
         self.attributes('-topmost', 0)
-        self.lower()
+        if fatal:
+            self.withdraw()
+        else:
+            self.lower()
         show_error(msg)
-        self.lift()
         self.attributes('-topmost', old_topmost)
+        if fatal:
+            debug_err(
+                'Closing {} for fatal error:\n{}'.format(
+                    type(self).__name__,
+                    msg,
+                )
+            )
+            self.after_idle(self.destroy, False)
+        else:
+            self.lift()
 
 
 # Use TkErrorLogger

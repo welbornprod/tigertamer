@@ -518,6 +518,9 @@ class WinMain(tk.Tk):
         """ Handles btn_run click. """
         # Validate dirs, but allow an empty archive dir.
         if not self.validate_dirs(ignore_dirs=('archive', )):
+            if self.settings.get('auto_run', False):
+                # Close on errors when auto-running.
+                self.destroy()
             return
 
         self.enable_interface(False)
@@ -530,17 +533,23 @@ class WinMain(tk.Tk):
                 split_parts=not self.var_no_part_split.get(),
             )
         except OSError as ex:
-            self.show_error('Cannot load .dat files in: {}\n{}'.format(
-                mozdir,
-                ex,
-            ))
+            self.show_error(
+                'Cannot load .dat files in: {}\n{}'.format(
+                    mozdir,
+                    ex,
+                ),
+                fatal=self.settings.get('auto_run', False),
+            )
             self.enable_interface(True)
             return
 
         if not mozfiles:
-            self.show_error('No Mozaik (.dat) files found in: {}'.format(
-                mozdir,
-            ))
+            self.show_error(
+                'No Mozaik (.dat) files found in: {}'.format(
+                    mozdir,
+                ),
+                fatal=self.settings.get('auto_run', False),
+            )
             self.enable_interface(True)
             return
 
@@ -766,21 +775,24 @@ class WinMain(tk.Tk):
             title='Remove {} {}?'.format(filelen, plural)
         )
 
-    def destroy(self):
-        debug('Saving gui config...')
-        self.settings['dat_dir'] = [self.entry_dat.get()]
-        self.settings['tiger_dir'] = self.entry_tiger.get()
-        self.settings['archive_dir'] = self.entry_arch.get()
-        self.settings['geometry'] = self.geometry()
-        self.settings['theme'] = self.theme
-        self.settings['auto_exit'] = self.var_auto_exit.get()
-        self.settings['extra_data'] = self.var_extra_data.get()
-        self.settings['no_part_split'] = self.var_no_part_split.get()
-        # Child windows have saved their geometry already.
-        for key in list(self.settings):
-            if key.startswith('geometry_'):
-                self.settings.pop(key)
-        config_save(self.settings)
+    def destroy(self, save_config=True):
+        if save_config:
+            debug('Saving gui config...')
+            self.settings['dat_dir'] = [self.entry_dat.get()]
+            self.settings['tiger_dir'] = self.entry_tiger.get()
+            self.settings['archive_dir'] = self.entry_arch.get()
+            self.settings['geometry'] = self.geometry()
+            self.settings['theme'] = self.theme
+            self.settings['auto_exit'] = self.var_auto_exit.get()
+            self.settings['extra_data'] = self.var_extra_data.get()
+            self.settings['no_part_split'] = self.var_no_part_split.get()
+            # Child windows have saved their geometry already.
+            for key in list(self.settings):
+                if key.startswith('geometry_'):
+                    self.settings.pop(key)
+            config_save(self.settings)
+        else:
+            debug('Not saving gui config!')
         debug('Closing main window (geometry={!r}).'.format(self.geometry()))
         super().destroy()
 
@@ -838,14 +850,29 @@ class WinMain(tk.Tk):
         if allow_auto_exit and self.var_auto_exit.get():
             self.destroy()
 
-    def show_error(self, msg):
-        """ Use show_error, but make sure this window is out of the way. """
+    def show_error(self, msg, fatal=False):
+        """ Use show_error, but make sure this window is out of the way.
+            If `fatal` is truthy, call `self.destroy()` afterwards.
+        """
         old_topmost = self.attributes('-topmost')
         self.attributes('-topmost', 0)
-        self.lower()
+        if fatal:
+            self.withdraw()
+        else:
+            self.lower()
         show_error(msg)
         self.attributes('-topmost', old_topmost)
-        self.lift()
+        if fatal:
+            config_increment(fatal_errors=1, default=0)
+            debug_err(
+                'Closing {} for fatal error:\n{}'.format(
+                    type(self).__name__,
+                    msg,
+                )
+            )
+            self.after_idle(self.destroy, False)
+        else:
+            self.lift()
 
     def show_report(
             self, parent_files, error_files, success_files,
@@ -907,8 +934,6 @@ def load_gui(**kwargs):
     tiger_files = kwargs.pop('tiger_files')
     preview_files = kwargs.pop('preview_files')
     debug('Starting main window...')
-    debug('tiger_files: {}'.format(tiger_files))
-    debug('preview_files: {}'.format(preview_files))
     win = WinMain(**kwargs)  # noqa
     if (tiger_files is not None) and (not tiger_files):
         # --view was used without file paths.

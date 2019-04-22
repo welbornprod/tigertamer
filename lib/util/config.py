@@ -25,7 +25,7 @@ colr_auto_disable()
 debugprinter.enable(('-D' in sys.argv) or ('--debug' in sys.argv))
 
 NAME = 'Tiger Tamer'
-VERSION = '0.2.7'
+VERSION = '0.2.8'
 AUTHOR = 'Christopher Joseph Welborn'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
@@ -189,6 +189,7 @@ def get_system_info():
         'archive_files': config_get('archive_files', 0),
         'unarchive_files': config_get('unarchive_files', 0),
         'remove_files': config_get('remove_files', 0),
+        'fatal_errors': config_get('fatal_errors', 0),
     }
 
 
