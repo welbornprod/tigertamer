@@ -701,10 +701,6 @@ class WinMain(tk.Tk):
         )
         return True
 
-    def cmd_menu_test(self):
-        """ Test menu item, foobjectr dev-related testing. """
-        debug('Test menu clicked.')
-
     def cmd_menu_unarchive(self, remove_tiger_files=False):
         """ Handles btn_unarchive click. """
         if not self.validate_dirs(ignore_dirs=('tiger', 'mozaik')):
@@ -770,7 +766,7 @@ class WinMain(tk.Tk):
                 for s in files
             )
         )
-        return show_question(
+        return self.show_question(
             msg,
             title='Remove {} {}?'.format(filelen, plural)
         )
@@ -873,6 +869,18 @@ class WinMain(tk.Tk):
             self.after_idle(self.destroy, False)
         else:
             self.lift()
+
+    def show_question(self, msg, title=None):
+        """ Show a tkinter askyesno dialog, but make sure this window is
+            out of the way.
+        """
+        old_topmost = self.attributes('-topmost')
+        self.attributes('-topmost', 0)
+        self.lower()
+        ans = show_question(msg, title=title)
+        self.attributes('-topmost', old_topmost)
+        self.lift()
+        return ans
 
     def show_report(
             self, parent_files, error_files, success_files,

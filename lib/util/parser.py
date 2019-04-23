@@ -8,7 +8,6 @@
 import csv
 import os
 import re
-import shutil
 import sys
 from collections import UserDict
 from contextlib import suppress
@@ -18,9 +17,11 @@ from colr import (
     Colr as C,
 )
 
-from .config import (
-    config_increment,
+from .archive import (
+    archive_file,
+    increment_file_path,
 )
+
 from .logger import (
     debug,
     debug_err,
@@ -31,104 +32,9 @@ from .format import create_xml
 
 colr_auto_disable()
 
-# Pattern to grab multiple cab quantities from a room/cab number.
-cab_count_pat = re.compile(r'R?\d{1,3}?\:?\d{1,3}?\((\d{1,3})\)')
+
 # Pattern to grab one or more quantities from a room/cab number.
 cab_multi_count_pat = re.compile(r'\((\d{1,3})\)')
-
-# Char for splitting/re-joining archive file paths.
-archive_split_char = '__'
-
-
-def archive_parent_file(datfile, archive_dir):
-    """ Move the parent file of this MozaikFile to the archive dir,
-        if not already done.
-    """
-    parentdir, parentname = os.path.split(datfile.parent_file)
-    _, parentsubdir = os.path.split(parentdir)
-    newparentname = archive_split_char.join((parentsubdir, parentname))
-    archpath = os.path.join(archive_dir, newparentname)
-    if not os.path.exists(datfile.parent_file):
-        if os.path.exists(archpath):
-            debug('Already archived: {}'.format(archpath))
-            return 0
-        debug_err('Missing parent file: {}'.format(datfile.parent_file))
-        return 1
-
-    # Create archive dir if needed.
-    if not os.path.isdir(archive_dir):
-        try:
-            os.mkdir(archive_dir)
-        except EnvironmentError as ex:
-            print_err('Failed to create archive dir: {}'.format(ex))
-            return 1
-        else:
-            debug('Created archive directory: {}'.format(archive_dir))
-
-    # Move master file to archive.
-    try:
-        destfile = safe_move(datfile.parent_file, archpath)
-    except EnvironmentError as ex:
-        print_err('Failed to copy master file: {}\n{}'.format(
-            datfile.parent_file,
-            ex,
-        ))
-        return 1
-    else:
-        status('Archived', destfile)
-        config_increment(archive_files=1, default=0)
-
-    return remove_dir_if_empty(parentdir)
-
-
-def get_archive_info(datdir, archdir, listdir=os.listdir):
-    """ Get all file paths in the archive directory, and where they would
-        be restored to.
-        Returns [(archivefile, restoretofile), ...]
-    """
-    try:
-        archfiles = listdir(archdir)
-    except OSError as ex:
-        raise OSError('Unable to unarchive files!: ({}) {}'.format(
-            type(ex).__name__,
-            ex,
-        )) from ex
-
-    if not archfiles:
-        raise ValueError('No files to unarchive.')
-
-    # TODO: This currently doesn't handle mixed-version archive files.
-    #       The presence of one bad archive file ruins the whole thing
-    #       because of the `zip(origpaths, destpaths)` call at the end.
-    origpaths = (os.path.join(archdir, s) for s in archfiles)
-    relpathpcs = (
-        s.rsplit(archive_split_char, 1)
-        for s in archfiles
-    )
-    relpaths = []
-    datdirparent, datdirsub = os.path.split(datdir)
-    if not datdirsub:
-        datdirsub = datdirparent
-
-    for relpathpc in relpathpcs:
-        try:
-            subdir, name = relpathpc
-        except ValueError:
-            debug_err('Not a valid archive file name: {!r}'.format(relpathpc))
-            continue
-        if datdirsub.endswith(subdir):
-            relpaths.append(name)
-        else:
-            relpaths.append(os.path.join(subdir, name))
-    destpaths = (
-        os.path.join(datdir, s)
-        for s in relpaths
-    )
-    # Sort files by destination path, for printing status.
-    return sorted(
-        zip(origpaths, destpaths),
-        key=lambda tup: tup[1],
-    )
 
 
 def get_dir_files(
@@ -188,31 +94,6 @@ def get_tiger_files(outdir):
             'Can\'t list files in: {}\n{}'.format(outdir, ex)
         ) from ex
     return filepaths
-
-
-def increment_file_path(path):
-    """ Turns file paths like: /dir/filepath.ext into /dir/filepath(2).ext
-    """
-    numpat = re.compile(r'.+(\(\d+\))\.\w{1,5}$')
-    match = numpat.search(path)
-
-    fpath, ext = os.path.splitext(path)
-    if (match is None) or (not match):
-        # First file.
-        newpath = ''.join((fpath, '(1)', ext))
-        if os.path.exists(newpath):
-            return increment_file_path(newpath)
-        return newpath
-
-    # Get the (num) part and strip the parens.
-    numpart = match.groups()[0]
-    num = int(numpart[1:-1])
-    # Rebuild the number, and replace the old one.
-    newnum = '({})'.format(num + 1)
-    newpath = path.replace(numpart, newnum)
-    if os.path.exists(newpath):
-        return increment_file_path(newpath)
-    return newpath
 
 
 def is_ignored_dir(dirpath, ignore_dirs=None, ignore_strs=None):
@@ -320,40 +201,6 @@ def load_moz_files(
     return files
 
 
-def remove_dir_if_empty(path):
-    """ Remove a directory, if it's empty.
-        Returns an exit status code of 0 if everything went well.
-        Otherwise it returns 1.
-    """
-    try:
-        files = os.listdir(path)
-    except OSError as ex:
-        print_err('Unable to list files: {}\n{}'.format(path, ex))
-        return 1
-    if files:
-        debug('Directory not empty: {}'.format(path))
-        return 0
-    debug('Directory is empty, removing it: {}'.format(path))
-    try:
-        os.rmdir(path)
-    except OSError as ex:
-        print_err('Cannot remove dir: {}\n{}'.format(path, ex))
-        return 1
-    debug('Removed directory: {}'.format(path))
-    return 0
-
-
-def safe_move(src, dest):
-    """ Move a file, using shutil.copy2 without overwriting existing files.
-        This function will rename the destination file to avoid clobbering.
-    """
-    # Don't clobber existing archives just because of poor naming.
-    if os.path.exists(dest):
-        dest = increment_file_path(dest)
-        debug('Renaming file: {}'.format(dest))
-    return shutil.move(src, dest)
-
-
 def strip_words(s, words):
     """ Strip several words from a string. """
     pat = '|'.join('({})'.format(word) for word in words)
@@ -362,35 +209,6 @@ def strip_words(s, words):
 
 def trim_cab_count(cabno):
     return re.sub(r'\(\d{1,3}\)', '', cabno)
-
-
-def unarchive_file(src, dest):
-    """ Unarchive a .dat file, restoring it to it's destination.
-        Returns the destination path on success.
-    """
-    destdir = os.path.dirname(dest)
-    if not os.path.exists(destdir):
-        try:
-            debug('Creating directory: {}'.format(destdir))
-            os.mkdir(destdir)
-        except OSError as ex:
-            raise OSError(
-                'Cannot create directory: {}\n{}'.format(destdir, ex)
-            ) from ex
-        else:
-            debug('Created directory: {}'.format(destdir))
-    try:
-        shutil.move(src, dest)
-    except OSError:
-        msg = '\n'.join((
-            'Unable to unarchive/move file:',
-            '{src}',
-            '-> {dest}',
-        )).format(src=src, dest=dest)
-        raise ValueError(msg)
-    else:
-        debug('Moved {} -> {}'.format(src, dest))
-    return dest
 
 
 def write_tiger_file(
@@ -438,7 +256,13 @@ def write_tiger_file(
     if outdir in (None, '-'):
         debug('Archiving disabled due to output style.')
         return success_cb(mozfile, tigerpath) if use_success_cb else 0
-    exitstatus = archive_parent_file(mozfile, archive_dir)
+
+    archived = archive_file(
+        mozfile.parent_file,
+        archive_dir,
+        created_files=[mozfile.filepath]
+    )
+    exitstatus = 0 if archived else 1
     return success_cb(mozfile, tigerpath) if use_success_cb else exitstatus
 
 

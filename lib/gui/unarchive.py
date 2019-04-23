@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-""" report.py
-    Report window for Tiger Tamer GUI.
+""" tigertamer - gui/unarchive.py
+    Unarchive window for Tiger Tamer GUI.
     -Christopher Welborn 01-05-2019
 """
 
@@ -13,9 +13,8 @@ from ..util.config import (
 from ..util.logger import (
     debug,
 )
-from ..util.parser import (
-    get_archive_info,
-    unarchive_file,
+from ..util.archive import (
+    Archive,
 )
 from .common import (
     create_event_handler,
@@ -69,8 +68,8 @@ class WinUnarchive(WinToplevelBase):
         self.win_report = None
 
         # Archive info, set with `self.build_file_tree()` after init.
-        # It will be a dict of {archive_file_name: restored_file_name, ..}
-        self.archive_info = None
+        # It will be a util.archive.Archive object.
+        self.archive = None
 
         # Topmost frame, for window padding.
         self.frm_main = ttk.Frame(self, padding='2 2 2 2')
@@ -181,16 +180,15 @@ class WinUnarchive(WinToplevelBase):
         # Hide this window, in case there are no files to display.
         self.withdraw()
         try:
-            self.archive_info = {
-                src: dest
-                for src, dest in get_archive_info(self.dat_dir, self.arch_dir)
-            }
+            self.archive = Archive(self.arch_dir, self.dat_dir)
         except (OSError, ValueError) as ex:
             return self.show_error(ex, fatal=True)
+        if not self.archive:
+            self.show_error('No archive files found.', fatal=True)
 
         # Show this window since we have files to display.
         self.deiconify()
-        for src in sorted(self.archive_info):
+        for src in sorted(self.archive):
             self.tree_files.insert(
                 '',
                 tk.END,
@@ -202,7 +200,7 @@ class WinUnarchive(WinToplevelBase):
         self.tree_files.heading(
             'file',
             anchor='w',
-            text=' Archive Files: {}'.format(len(self.archive_info)),
+            text=' Archive Files: {}'.format(len(self.archive)),
         )
 
     def cmd_btn_exit(self):
@@ -225,8 +223,8 @@ class WinUnarchive(WinToplevelBase):
         targetinfo = []
         for index in selected:
             iteminfo = self.tree_files.item(index)
-            filename = iteminfo['values'][0]
-            targetinfo.append((filename, self.archive_info[filename]))
+            filepath = iteminfo['values'][0]
+            targetinfo.append(self.archive[filepath])
 
         self.attributes('-topmost', 0)
         self.withdraw()
@@ -240,14 +238,14 @@ class WinUnarchive(WinToplevelBase):
         success = []
 
         archive_files = []
-        for src, dest in targetinfo:
-            archive_files.append(src)
+        for archfile in targetinfo:
+            archive_files.append(archfile.filepath)
             try:
-                finalpath = unarchive_file(src, dest)
+                archfile.unarchive()
             except OSError as ex:
-                errs.append((dest, str(ex)))
+                errs.append((archfile.dest_path, str(ex)))
             else:
-                success.append(finalpath)
+                success.append(archfile.filepath)
 
         config_increment(unarchive_files=len(success), default=0)
 
@@ -258,9 +256,9 @@ class WinUnarchive(WinToplevelBase):
         )
         return True
 
-    def confirm_unarchive(self, files):
+    def confirm_unarchive(self, archfiles):
         """ Returns True if the user confirms the question. """
-        filelen = len(files)
+        filelen = len(archfiles)
         plural = 'file' if filelen == 1 else 'files'
         msg = '\n'.join((
             'This will unarchive {length} {plural}:',
@@ -270,8 +268,8 @@ class WinUnarchive(WinToplevelBase):
             length=filelen,
             plural=plural,
             files='\n'.join(
-                '  {}'.format(trim_file_path(s))
-                for s, _ in files
+                '  {}'.format(trim_file_path(archfile.filepath))
+                for archfile in archfiles
             )
         )
         return self.show_question(

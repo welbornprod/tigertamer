@@ -198,8 +198,9 @@ def lock_acquire():
         acquired.
     """
     if os.path.exists(LOCKFILE):
-        debug('Lock already acquired: {}'.format(LOCKFILE), level=1)
-        raise ValueError('File lock already acquired: {}'.format(LOCKFILE))
+        msg = 'Lock already acquired: {}'.format(LOCKFILE)
+        debug(msg, level=1)
+        raise ValueError(msg)
     with open(LOCKFILE, 'w') as f:
         f.write(str(PID))
     debug('Lock acquired: {}'.format(LOCKFILE), level=1)

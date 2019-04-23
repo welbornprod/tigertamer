@@ -237,7 +237,7 @@ class WinToplevelBase(tk.Toplevel):
                     msg,
                 )
             )
-            self.after_idle(self.destroy, False)
+            self.after_idle(self.destroy)
         else:
             self.lift()
 

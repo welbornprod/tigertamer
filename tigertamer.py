@@ -45,6 +45,10 @@ from lib.util.config import (
     NAME,
     VERSIONSTR,
 )
+from lib.util.archive import (
+    Archive,
+    list_archive,
+)
 from lib.util.format import (
     TigerFile,
     list_labelconfig,
@@ -67,10 +71,8 @@ from lib.gui.main import (
 from lib.util.parser import (
     MozaikMasterFile,
     create_xml,
-    get_archive_info,
     get_tiger_files,
     load_moz_files,
-    unarchive_file,
     write_tiger_file,
 )
 
@@ -89,6 +91,7 @@ USAGESTR = """{versionstr}
         {script} (-F | -h | -L | -v) [-D]
         {script} -f func [-e] [-s] [-D]
         {script} -g [-e] [-r] [-s] [-D]
+        {script} [-g] -A [-D]
         {script} (-u | -U) [-a dir | ARCHIVE_FILE...] [-D]
         {script} [-g] (-p | -V) FILE... [-D]
         {script} (-m | -M | -t | -T) FILE... [-D]
@@ -101,6 +104,7 @@ USAGESTR = """{versionstr}
         ARCHIVE_FILE          : One or more archived file paths to unarchive.
         FILE                  : One or more CSV (.dat) files to parse,
                                 or Tiger (.tiger) files to view with -V.
+        -A,--ARCHIVE          : List archived files.
         -a dir,--archive dir  : Directory for completed master files, or for
                                 unarchiving all files at once.
                                 Use - to disable archiving when converting
@@ -178,6 +182,9 @@ def main(argd):
     # Handle config/arg flags.
     argd['--extra'] = config_get('extra_data', argd['--extra'])
     argd['--nosplit'] = config_get('no_part_split', argd['--nosplit'])
+    if argd['--gui'] and argd['--ARCHIVE']:
+        # Little hack to force calling `cmd_menu_unarchive` on load.
+        argd['--func'] = 'cmd_menu_unarchive'
 
     if argd['--gui'] or argd['--func']:
         # The GUI handles arguments differently, send it the correct config.
@@ -215,6 +222,10 @@ def main(argd):
     except ValueError:
         print_err('{} already running.'.format(NAME))
         return 3
+
+    if argd['--ARCHIVE']:
+        # List archive files.
+        return list_archive(archdir, inpaths[0])
 
     if argd['--functions']:
         # List functions available for -f.
@@ -427,15 +438,14 @@ def unarchive(datdir, archdir=None, filepaths=None):
 
     try:
         # Known archived files.
-        files = get_archive_info(datdir, archdir)
+        archive = Archive(archdir, datdir)
     except (OSError, ValueError) as ex:
         print_err(ex)
         return 1
     if filepaths:
         filepath_errs = 0
-        srcfiles = [src for src, _ in files]
         for filepath in filepaths:
-            if filepath not in srcfiles:
+            if filepath not in archive:
                 print_err('Not an archived file: {}'.format(filepath))
                 filepath_errs += 1
         if filepath_errs:
@@ -443,17 +453,17 @@ def unarchive(datdir, archdir=None, filepaths=None):
 
     errs = 0
     success = 0
-    for src, dest in files:
-        if filepaths and (src not in filepaths):
-            debug('Archive file not selected: {}'.format(src))
+    for archfile in archive.files:
+        if filepaths and (archfile.filepath not in filepaths):
+            debug('Archive file not selected: {}'.format(archfile.filepath))
             continue
         try:
-            finalpath = unarchive_file(src, dest)
+            archfile.unarchive()
         except OSError as ex:
             print_err(ex)
             errs += 1
         else:
-            status('Unarchived', finalpath)
+            status('Unarchived', archfile.dest_path)
             success += 1
     status(
         'Unarchived Files',
