@@ -257,14 +257,13 @@ def main(argd):
             raise InvalidConfig(
                 '.dat dir and archive dir must be set in config.'
             )
-        errs = unarchive(inpaths[0], archdir, filepaths=argd['ARCHIVE_FILE'])
-        if argd['--unarchive']:
-            return errs
-        if not options_are_set(outdir):
-            raise InvalidConfig(
-                'Output directory must be set in config.'
-            )
-        return remove_tiger_files(outdir)
+        errs = unarchive(
+            inpaths[0],
+            archdir,
+            filepaths=argd['ARCHIVE_FILE'],
+            remove_tiger_files=argd['--UNARCHIVE'],
+        )
+        return errs
 
     # Run in console mode.
     if not inpaths:
@@ -430,7 +429,7 @@ def remove_tiger_files(outdir):
     return errs
 
 
-def unarchive(datdir, archdir=None, filepaths=None):
+def unarchive(datdir, archdir=None, filepaths=None, remove_tiger_files=False):
     """ Unarchive all dat files in `archdir`, and put them in `datdir`. """
     if not (archdir or filepaths):
         print_err('No file paths or archive directory specified!')
@@ -458,7 +457,7 @@ def unarchive(datdir, archdir=None, filepaths=None):
             debug('Archive file not selected: {}'.format(archfile.filepath))
             continue
         try:
-            archfile.unarchive()
+            archfile.unarchive(remove_tiger_files=remove_tiger_files)
         except OSError as ex:
             print_err(ex)
             errs += 1

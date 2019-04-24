@@ -701,15 +701,10 @@ class WinMain(tk.Tk):
         )
         return True
 
-    def cmd_menu_unarchive(self, remove_tiger_files=False):
+    def cmd_menu_unarchive(self, remove_created=False):
         """ Handles btn_unarchive click. """
         if not self.validate_dirs(ignore_dirs=('tiger', 'mozaik')):
             return False
-
-        if remove_tiger_files:
-            report_cb = self.cmd_menu_remove_tiger_files
-        else:
-            report_cb = None
 
         self.enable_interface(False)
         self.win_unarchive = WinUnarchive(
@@ -719,15 +714,15 @@ class WinMain(tk.Tk):
                 'geometry_unarchive': self.settings['geometry_unarchive'],
             },
             destroy_cb=lambda: self.enable_interface(True),
-            report_cb=report_cb,
             arch_dir=self.entry_arch.get(),
             dat_dir=self.entry_dat.get(),
+            remove_created=remove_created,
         )
         return True
 
     def cmd_menu_unarchive_and_remove(self):
         """ Handles menu->Unarchive and Remove Tiger Files """
-        return self.cmd_menu_unarchive(remove_tiger_files=True)
+        return self.cmd_menu_unarchive(remove_created=True)
 
     def cmd_menu_viewer(self, filepaths=None, preview_files=None):
         """ Handles menu->Tiger Viewer click. """

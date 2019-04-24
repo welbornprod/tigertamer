@@ -31,14 +31,15 @@ from .report import WinReport
 class WinUnarchive(WinToplevelBase):
     def __init__(
             self, *args,
-            settings, destroy_cb, report_cb, arch_dir, dat_dir,
+            settings, destroy_cb, arch_dir, dat_dir,
+            remove_created=False,
             **kwargs):
 
         self.settings = settings
         self.destroy_cb = destroy_cb
-        self.report_cb = report_cb
         self.arch_dir = arch_dir
         self.dat_dir = dat_dir
+        self.remove_created = remove_created
         super().__init__(*args, **kwargs)
         self.debug_settings()
 
@@ -241,18 +242,29 @@ class WinUnarchive(WinToplevelBase):
         for archfile in targetinfo:
             archive_files.append(archfile.filepath)
             try:
-                archfile.unarchive()
+                archfile.unarchive(
+                    remove_created=self.remove_created
+                )
             except OSError as ex:
                 errs.append((archfile.dest_path, str(ex)))
             else:
-                success.append(archfile.filepath)
+                success.append(
+                    (archfile.filepath, len(archfile.created_files))
+                )
 
         config_increment(unarchive_files=len(success), default=0)
 
+        success_msgs = []
+        for filepath, created_len in success:
+            success_msgs.append(trim_file_path(filepath))
+            success_msgs.append('...Removed {} created {}.'.format(
+                created_len,
+                'file' if created_len == 1 else 'files',
+            ))
         self.show_report(
-            archive_files,
-            errs,
-            success,
+            [trim_file_path(s) for s in archive_files],
+            [(trim_file_path(s), m) for s, m in errs],
+            success_msgs,
         )
         return True
 
@@ -310,13 +322,7 @@ class WinUnarchive(WinToplevelBase):
         """
         # self.report_closed() will re-enable the interface.
         self.enable_interface(False)
-        if self.report_cb is None:
-            destroy_cb = self.destroy
-        else:
-            destroy_cb = [
-                self.destroy,
-                self.report_cb,
-            ]
+
         reportmsg = 'Success'
         if error_files:
             reportmsg = 'Errors: {}'.format(len(error_files))
@@ -327,12 +333,10 @@ class WinUnarchive(WinToplevelBase):
             settings={
                 'geometry_report': self.settings['geometry_report'],
             },
-            destroy_cb=destroy_cb,
-            parent_files=[trim_file_path(s) for s in parent_files],
-            error_files=[
-                (trim_file_path(s), m) for s, m in error_files
-            ],
-            success_files=[trim_file_path(s) for s in success_files],
+            destroy_cb=self.destroy,
+            parent_files=parent_files,
+            error_files=error_files,
+            success_files=success_files,
             parent_name='Archive',
             success_name='Restored',
         )

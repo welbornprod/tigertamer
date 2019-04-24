@@ -51,56 +51,6 @@ def archive_file(filepath, archive_dir, created_files=None):
     return archfile.archive()
 
 
-def get_archive_info(datdir, archdir, listdir=os.listdir):
-    """ Get all file paths in the archive directory, and where they would
-        be restored to.
-        Returns [(archivefile, restoretofile), ...]
-    """
-    try:
-        archfiles = listdir(archdir)
-    except OSError as ex:
-        raise OSError('Unable to unarchive files!: ({}) {}'.format(
-            type(ex).__name__,
-            ex,
-        )) from ex
-
-    if not archfiles:
-        raise ValueError('No files to unarchive.')
-
-    # TODO: This currently doesn't handle mixed-version archive files.
-    #       The presence of one bad archive file ruins the whole thing
-    #       because of the `zip(origpaths, destpaths)` call at the end.
-    origpaths = (os.path.join(archdir, s) for s in archfiles)
-    relpathpcs = (
-        s.rsplit(archive_split_char, 1)
-        for s in archfiles
-    )
-    relpaths = []
-    datdirparent, datdirsub = os.path.split(datdir)
-    if not datdirsub:
-        datdirsub = datdirparent
-
-    for relpathpc in relpathpcs:
-        try:
-            subdir, name = relpathpc
-        except ValueError:
-            debug_err('Not a valid archive file name: {!r}'.format(relpathpc))
-            continue
-        if datdirsub.endswith(subdir):
-            relpaths.append(name)
-        else:
-            relpaths.append(os.path.join(subdir, name))
-    destpaths = (
-        os.path.join(datdir, s)
-        for s in relpaths
-    )
-    # Sort files by destination path, for printing status.
-    return sorted(
-        zip(origpaths, destpaths),
-        key=lambda tup: tup[1],
-    )
-
-
 def increment_file_path(path):
     """ Turns file paths like: /dir/filepath.ext into /dir/filepath(2).ext
     """
@@ -169,7 +119,10 @@ def safe_move(src, dest):
 
 
 class Archive(UserDict):
-    """ A collection of ArchiveFiles, built from listing an archive dir. """
+    """ A collection of ArchiveFiles, built from listing an archive dir.
+        An Archive behaves like a `dict`, where archive file paths are the
+        keys, and ArchiveFile objects are the values.
+    """
     def __init__(self, archive_dir, dest_dir, files=None):
         self.archive_dir = archive_dir
         self.dest_dir = dest_dir
@@ -215,7 +168,11 @@ class Archive(UserDict):
 
     def filter_files(self, filepaths):
         """ Return a list of valid archive files in `filepaths`. """
-        return [s for s in filepaths if archive_split_char in s]
+        return [
+            s
+            for s in filepaths
+            if self.is_archive_file(s)
+        ]
 
     def get_files(self):
         """ Return a dict of {filepath: ArchiveFile} for all files
@@ -237,15 +194,25 @@ class Archive(UserDict):
 
         return self.build_files(archfiles)
 
+    @staticmethod
+    def is_archive_file(s):
+        return (archive_split_char in s) and s.endswith('.dat')
+
 
 class ArchiveFile(object):
     """ A file from the archives, to view or unarchive, """
     def __init__(self, filepath, dest_dir):
         self.filepath = filepath
+        # File path for created files info.
+        fpath, ext = os.path.splitext(self.filepath)
+        self.info_path = ''.join((fpath, '.info'))
+
         self.dest_dir = dest_dir
 
         # Destination path when unarchived.
         self.dest_path = self.get_dest_path()
+
+        self.created_files = self.load_created_files()
 
     def __colr__(self):
         filepath = C('/', style='bright').join(
@@ -256,10 +223,16 @@ class ArchiveFile(object):
             C(s, 'cyan')
             for s in os.path.split(self.dest_path)
         )
-        return C('\n ⮩ ', 'yellow', style='bright').join(
+
+        fileinfo = C('\n ⮩ ', 'yellow', style='bright').join(
             filepath,
             destpath,
         )
+        created = C(': ').join(
+            C('created', 'dimgrey'),
+            C(len(self.created_files), 'blue', style='bright'),
+        ).join('(', ')')
+        return C(' ').join(fileinfo, created)
 
     def __eq__(self, other):
         return hash(self) == hash(other)
@@ -273,7 +246,7 @@ class ArchiveFile(object):
         return self.filepath > other.filepath
 
     def __hash__(self):
-        return hash(str(self))
+        return hash(str(self.filepath))
 
     def __lt__(self, other):
         if not isinstance(other, ArchiveFile):
@@ -312,13 +285,78 @@ class ArchiveFile(object):
 
         return os.path.join(self.dest_dir, relpath)
 
+    def load_created_files(self):
+        """ Returns a list of output files created by this archive file. """
+        try:
+            with open(self.info_path, 'r') as f:
+                created = list(sorted(s.strip() for s in f))
+        except FileNotFoundError:
+            debug('No created files info for: {}'.format(self.filepath))
+            return []
+        except OSError as ex:
+            debug_err('Unable to read created files info: {}\n{}'.format(
+                self.info_path,
+                ex,
+            ))
+            return []
+        lencreated = len(created)
+        plural = 'file' if lencreated == 1 else 'files'
+        debug('Found {} created {} for: {}'.format(
+            lencreated,
+            plural,
+            self.filepath,
+        ))
+        return created
+
+    def remove_created_files(self):
+        """ Delete all files created by this archive file from the output
+            directory.
+        """
+        if not self.created_files:
+            debug('No files to remove.')
+            return True
+        removed = 0
+        for filepath in self.created_files:
+            try:
+                os.remove(filepath)
+            except FileNotFoundError:
+                debug('Already removed: {}'.format(filepath))
+            except OSError as ex:
+                debug('Unable to remove created file: {}\n{}'.format(
+                    filepath,
+                    ex,
+                ))
+            else:
+                removed += 1
+        debug('Removed {} created {} for: {}'.format(
+            removed,
+            'file' if removed == 1 else 'files',
+            self.filepath,
+        ))
+        return removed == len(self.created_files)
+
+    def remove_info_file(self):
+        """ Delete the created files (.info) file for this archive file. """
+        try:
+            os.remove(self.info_path)
+        except FileNotFoundError:
+            debug('Already removed created files: {}'.format(self.info_path))
+            return True
+        except OSError as ex:
+            debug_err('Unable to remove created files for: {}\n{}'.format(
+                self.info_path,
+                ex,
+            ))
+            return False
+        return True
+
     @staticmethod
     def trim_path(filepath):
         path, fname = os.path.split(filepath)
         _, subdir = os.path.split(path)
         return os.path.join(subdir, fname)
 
-    def unarchive(self):
+    def unarchive(self, remove_created=False):
         """ Unarchive this ArchiveFile. """
         if not self.dest_path:
             return False
@@ -345,7 +383,10 @@ class ArchiveFile(object):
             raise ValueError(msg)
         else:
             debug('Moved {} -> {}'.format(self.filepath, self.dest_path))
-        return True
+        success = True
+        if remove_created:
+            success = self.remove_created_files()
+        return success and self.remove_info_file()
 
 
 class FinishedFile(object):
@@ -363,6 +404,11 @@ class FinishedFile(object):
         self.is_archived = False
         # Destination/Archived file path.
         self.archived_path = self.get_archived_path()
+        # File path for created files info.
+        fpath, ext = os.path.splitext(self.archived_path)
+        self.info_path = ''.join((fpath, '.info'))
+
+        self.save_created()
 
     def add_created(self, created_files):
         """ Add some created_files to this FinishedFile.
@@ -370,10 +416,13 @@ class FinishedFile(object):
         """
         if not created_files:
             return None
-        self.created_files.append(created_files)
+
+        self.created_files.extend(created_files)
+        self.save_created()
 
     def archive(self):
         """ Archive this file, if it is not archived already. """
+        self.is_archived = False
         if self.archive_dir in (None, '', '-'):
             debug('Archiving disabled for: {}'.format(self.filepath))
             return False
@@ -419,3 +468,36 @@ class FinishedFile(object):
             self.parent_name
         ))
         return os.path.join(self.archive_dir, newparentname)
+
+    def save_created(self):
+        """ Load self.info_path, read the file list, add any new files,
+            and save it.
+            Returns the number of lines written.
+        """
+        try:
+            with open(self.info_path, 'r') as f:
+                created = set(s.strip() for s in f)
+        except FileNotFoundError:
+            # Not saved yet.
+            debug('Saving created files for: {}'.format(self.info_path))
+            created = set()
+        except OSError as ex:
+            debug_err('Unable to load created files for: {}\n{}'.format(
+                self.info_path,
+                ex,
+            ))
+            return None
+
+        created.update(self.created_files)
+        self.created_files = list(sorted(created))
+
+        try:
+            with open(self.info_path, 'w') as f:
+                f.write('\n'.join(sorted(created)))
+        except OSError as ex:
+            debug_err('Unable to save created files for: {}\n{}'.format(
+                self.info_path,
+                ex,
+            ))
+        debug('Saved created files info: {}'.format(self.info_path))
+        return len(created)

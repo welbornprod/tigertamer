@@ -260,7 +260,7 @@ def write_tiger_file(
     archived = archive_file(
         mozfile.parent_file,
         archive_dir,
-        created_files=[mozfile.filepath]
+        created_files=[tigerpath]
     )
     exitstatus = 0 if archived else 1
     return success_cb(mozfile, tigerpath) if use_success_cb else exitstatus

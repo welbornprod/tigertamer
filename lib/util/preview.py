@@ -14,7 +14,7 @@ from .format import TigerFile
 from .parser import MozaikMasterFile
 
 
-def check_file(filepath, max_size=4000):
+def check_file(filepath, max_size=16000):
     """ Check if a file exists, and is not larger than `max_size` bytes.
         Raises FileNotFoundError if the file cannot be found.
         Raises LargeFileError if the file is over `max_size` bytes.
