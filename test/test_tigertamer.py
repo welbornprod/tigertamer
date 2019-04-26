@@ -13,6 +13,11 @@ import unittest
 from colr import Colr as C
 from printdebug import DebugColrPrinter
 
+from ..lib.util.archive import (
+    Archive,
+    ArchiveFile,
+    archive_split_char,
+)
 from ..lib.util.config import (
     NotSet,
 )
@@ -27,6 +32,11 @@ from ..test import (
 debugprinter = DebugColrPrinter()
 debugprinter.enable(bool(os.environ.get('TT_TEST_DEBUG', 0)))
 debug = debugprinter.debug
+
+try:
+    TESTDIR = os.path.split(__file__)[0]
+except NameError:
+    TESTDIR = os.path.abspath(sys.path[0])
 
 
 def part_compare_fmt(a, b, mark_keys=None):
@@ -232,6 +242,54 @@ class MozaikMasterFileTests(unittest.TestCase):
                 desc=testitem.desc,
             )
             debug('Passed: {}'.format(testitem.desc))
+
+
+class ArchiveTestsBase(unittest.TestCase):
+    """ Common data/tests for Archive/ArchiveFile. """
+
+    def setUp(self):
+        self.archive_dir = os.path.join(TESTDIR, 'archived')
+        self.input_dir = os.path.join(TESTDIR, 'input')
+        self.output_dir = os.path.join(TESTDIR, 'output')
+
+
+class ArchiveFileTests(ArchiveTestsBase):
+    def setUp(self):
+        super().setUp()
+        self.filepaths = {
+            i: os.path.join(
+                self.archive_dir,
+                '{inputdir}{char}test_file{n}.dat'.format(
+                    inputdir=self.input_dir,
+                    char=archive_split_char,
+                    n=i,
+                )
+            )
+            for i in range(1, 6)
+        }
+
+    def test_name_parsing(self):
+        """ ArchiveFile's should parse file names properly. """
+        for i, filepath in self.filepaths.items():
+            a = ArchiveFile(filepath, TESTDIR)
+            destpath = os.path.join(
+                TESTDIR,
+                self.input_dir,
+                'test_file{}.dat'.format(i)
+            )
+            self.assertEqual(
+                a.dest_path,
+                destpath,
+                msg='Invalid dest_path.'
+            )
+
+        badpaths = ('not_an_archive.dat', 'not_an_archive.info')
+        for filepath in badpaths:
+            a = ArchiveFile(filepath, self.input_dir)
+            self.assertIsNone(
+                a.dest_path,
+                msg='dest_path was not supposed to be set.'
+            )
 
 
 if __name__ == '__main__':
