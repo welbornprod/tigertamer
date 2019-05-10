@@ -5,6 +5,7 @@
     -Christopher Welborn 02-25-2019
 """
 import os
+import re
 
 from .common import (
     create_event_handler,
@@ -279,13 +280,19 @@ class WinViewer(WinToplevelBase):
             columns=self.columns,
             show='headings',
         )
+        # Save info about how columns are sorted.
+        tree_view.sorted = {}
+        # Build columns/headings.
         for colname in self.columns:
             tree_view.column(colname, **self.column_info[colname])
             tree_view.heading(
                 colname,
                 anchor=tk.CENTER,
                 text='{}:'.format(colname.title()),
+                command=self.create_sort_callback(tree_view, colname),
             )
+            # The index column is always sorted on load. Other are not.
+            tree_view.sorted[colname] = (colname == 'index')
 
         scroll_view = ttk.Scrollbar(
             frm_tree,
@@ -344,7 +351,7 @@ class WinViewer(WinToplevelBase):
         else:
             text = None
         self.notebook.add(frm_view, text=text or 'No File')
-        debug('Added a new tab for: {}'.format(text or 'Unknown'))
+        debug('Added a new tab for: {}'.format(text or 'No File'))
         return tree_view
 
     def clear_tabs(self, tabids=None):
@@ -399,6 +406,16 @@ class WinViewer(WinToplevelBase):
         if not filepaths:
             return
         return self.preview_files(filepaths)
+
+    def create_sort_callback(self, treeview, colname):
+        """ Create a callback that sorts `treeview` based on the column name
+            (`colname`).
+        """
+        # If you're thinking of using a lambda directly in `build_tab()`,
+        # instead of using this function, think again.
+        # It completely breaks sorting if `create_sort_callback` isn't used.
+        # I think it has something to do with for-loop scoping.
+        return lambda: self.sort_treeview(treeview, colname)
 
     def destroy(self):
         debug('Saving gui-viewer config...')
@@ -495,11 +512,7 @@ class WinViewer(WinToplevelBase):
 
     def remove_tab(self, tabid):
         """ Remove a tab and it's associated file name. """
-        try:
-            tabid = int(tabid)
-        except ValueError:
-            # Tab id str.
-            tabid = self.notebook.index(tabid)
+        tabid = self.tab_index(tabid)
         if tabid == 0 and not self.filepaths:
             # Can't remove the default tab.
             debug('Not removing the default tab.')
@@ -523,6 +536,67 @@ class WinViewer(WinToplevelBase):
         self.attributes('-topmost', 1)
         self.deiconify()
         return ret
+
+    def sort_treeview(self, treeview, column_name):
+        """ Sort a Treeview's items based on a `column_name` from
+            `self.columns`.
+            Sort direction is saved on the Treeview itself, as
+            `treeview[sorted][column_name]`. It was set in `build_tab()`
+            already.
+        """
+        column_index = self.columns.index(column_name)
+
+        if column_name == 'length':
+            sortable = float
+        elif column_name in ('index', 'quantity', 'completed'):
+            sortable = int
+        elif column_name == 'no':
+            # "Smart" sorting for rooms/cabs.
+            def no_sort(no):
+                try:
+                    room, cab = no.split(':')
+                except ValueError:
+                    room = '1'
+                    cab = no
+                room = room.lstrip('Rr')
+                cab = re.sub(r'&|\(\d+\)', '', cab)
+                return int(room), int(cab)
+            sortable = no_sort
+        else:
+            sortable = str
+
+        def sort_key(itemid):
+            iteminfo = treeview.item(itemid)
+            return sortable(iteminfo['values'][column_index])
+
+        sortedinfo = list(sorted(
+            (itemid for itemid in treeview.get_children()),
+            key=sort_key,
+            reverse=treeview.sorted[column_name],
+        ))
+
+        for i, itemid in enumerate(sortedinfo):
+            treeview.move(itemid, '', i)
+        # Tag s with the direction they need to be sorted next time.
+        for colname in self.columns:
+            if colname == column_name:
+                # This column will be sorted the opposite next time.
+                treeview.sorted[colname] = not treeview.sorted[column_name]
+            else:
+                # Other columns will be fwd sorted next time.
+                treeview.sorted[colname] = False
+
+    def tab_index(self, tabid):
+        """ Get index into self.filepaths, self.lbl_views, self.tree_views
+            by numerical index or tab id str.
+            Returns the numerical index.
+        """
+        try:
+            tabid = int(tabid)
+        except ValueError:
+            # Tab id str.
+            tabid = self.notebook.index(tabid)
+        return tabid
 
     def view_files(self, filepaths):
         for filepath in filepaths:
