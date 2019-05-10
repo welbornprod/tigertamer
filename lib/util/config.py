@@ -25,7 +25,7 @@ colr_auto_disable()
 debugprinter.enable(('-D' in sys.argv) or ('--debug' in sys.argv))
 
 NAME = 'Tiger Tamer'
-VERSION = '0.2.9'
+VERSION = '0.3.0'
 AUTHOR = 'Christopher Joseph Welborn'
 VERSIONSTR = '{} v. {}'.format(NAME, VERSION)
 SCRIPT = os.path.split(os.path.abspath(sys.argv[0]))[1]
