@@ -93,19 +93,28 @@ def show_done_msg(msg, errors=0):
 
 def show_error(msg):
     """ Show a tkinter error dialog. """
-    title = '{} - Error'.format(NAME)
+    title = f'{NAME} - Error'
     messagebox.showerror(title=title, message=str(msg))
+
+
+def show_info(msg, title=None):
+    """ Show a tkinter info dialog. """
+    usertitle = f' - {title}' if title else ''
+    title = f'{NAME}{usertitle}'
+    messagebox.showinfo(title=title, message=str(msg))
 
 
 def show_question(msg, title=None):
     """ Show a tkinter askyesno dialog. """
-    title = '{} - {}'.format(NAME, title or 'Confirm')
+    usertitle = title or 'Confirm'
+    title = f'{NAME} - {usertitle}'
     return messagebox.askyesno(title=title, message=str(msg))
 
 
 def show_warning(msg, title=None):
     """ Show a tkinter warning dialog. """
-    title = '{} - {}'.format(NAME, title or 'Warning')
+    usertitle = title or 'Warning'
+    title = f'{NAME} - {usertitle}'
     return messagebox.showwarning(title=title, message=str(msg))
 
 
@@ -240,6 +249,17 @@ class WinToplevelBase(tk.Toplevel):
             self.after_idle(self.destroy)
         else:
             self.lift()
+
+    def show_info(self, msg, title=None):
+        """ Show a tkinter info dialog, but make sure this window is
+            out of the way.
+        """
+        old_topmost = self.attributes('-topmost')
+        self.attributes('-topmost', 0)
+        self.lower()
+        show_info(msg, title=title)
+        self.attributes('-topmost', old_topmost)
+        self.lift()
 
     def show_question(self, msg, title=None):
         """ Show a tkinter askyesno dialog, but make sure this window is

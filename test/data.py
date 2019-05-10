@@ -37,17 +37,18 @@ def default_mozaikpart(**kwargs):
     return MozaikPart(d)
 
 
-def default_partinfo(**kwargs):
+def default_partinfo(
+        count=1, width=2, length=42, type='BR', no='R1:1', extra_data='Frame'):
     """ Returns a default dict of kwargs for constructing MozaikMasterParts,
         where pieces can be overwritten with kwargs.
     """
     return {
-        'count': kwargs.get('count', 1),
-        'width': str(kwargs.get('width', 2)),
-        'length': str(kwargs.get('length', 42)),
-        'type': str(kwargs.get('type', 'BR')),
-        'no': str(kwargs.get('no', 'R1:1')),
-        'extra_data': str(kwargs.get('extra_data', 'Frame')),
+        'count': count,
+        'width': str(width),
+        'length': str(length),
+        'type': str(type),
+        'no': str(no),
+        'extra_data': str(extra_data),
     }
 
 
@@ -233,6 +234,34 @@ mozmasterfile = {
             default_masterpart(count=1, no='R3:2'),
             default_masterpart(count=1, no='R4:3'),
             default_masterpart(count=5, no='R4:4(5)'),
+        ],
+    },
+    # Issue #14
+    default_line(count=1, no='1'): {
+        'desc': 'One room, one part with no room number.',
+        'no_split': [default_masterpart(count=1, no='R1:1')],
+        'split': [default_masterpart(count=1, no='R1:1')],
+    },
+    default_line(count=3, no='1&2&3'): {
+        'desc': 'One room, three parts with no room number.',
+        'no_split': [
+            default_masterpart(count=3, no='R1:1&2&3'),
+        ],
+        'split': [
+            default_masterpart(count=1, no='R1:1'),
+            default_masterpart(count=1, no='R1:2'),
+            default_masterpart(count=1, no='R1:3'),
+        ],
+    },
+    default_line(count=5, no='1&2(2)&3(2)'): {
+        'desc': 'One room, five parts with quantity and no room number.',
+        'no_split': [
+            default_masterpart(count=5, no='R1:1&2(2)&3(2)'),
+        ],
+        'split': [
+            default_masterpart(count=1, no='R1:1'),
+            default_masterpart(count=2, no='R1:2(2)'),
+            default_masterpart(count=2, no='R1:3(2)'),
         ],
     },
 }

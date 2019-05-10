@@ -594,15 +594,9 @@ class MozaikMasterPart(object):
                     type(data['count'])
                 ),
             )
-        # Fix cab no? This may be deleted in the future.
-        cabno = getattr(self, 'no', None)
-        if not cabno:
-            if cabno is None:
-                debug_err('No cab number at all:')
-            else:
-                debug_err('Empty cab number:')
-            debug_err(self, align=True)
-            self.no = ''
+        if not self.no.lower().startswith('r'):
+            # No room number.
+            self.no = 'R1:{}'.format(self.no)
         self.fix_cab_count()
 
     def __bool__(self):
@@ -869,7 +863,12 @@ class MozaikMasterPart(object):
         tree = {}
         for part in self.split_parts():
             # room, cab, width, length, extra, part
-            room, cab = part.no.split(':')
+            try:
+                room, cab = part.no.split(':')
+            except ValueError:
+                # No room number.
+                room = 'R1'
+                cab = part.no
             cab = trim_cab_count(cab)
             tree.setdefault(
                 room,
