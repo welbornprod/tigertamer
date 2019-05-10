@@ -541,7 +541,7 @@ class WinViewer(WinToplevelBase):
         """ Sort a Treeview's items based on a `column_name` from
             `self.columns`.
             Sort direction is saved on the Treeview itself, as
-            `treeview[sorted][column_name]`. It was set in `build_tab()`
+            `treeview.sorted[column_name]`. It was set in `build_tab()`
             already.
         """
         column_index = self.columns.index(column_name)
