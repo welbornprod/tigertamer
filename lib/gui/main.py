@@ -727,12 +727,19 @@ class WinMain(tk.Tk):
     def cmd_menu_viewer(self, filepaths=None, preview_files=None):
         """ Handles menu->Tiger Viewer click. """
         self.enable_interface(False)
+        if filepaths or preview_files:
+            # Viewer was loaded from the start, close WinMain after.
+            destroy_cb = self.destroy
+        else:
+            # Viewer was loaded from the menu, enable the interface after.
+            destroy_cb = lambda: self.enable_interface(True)  # noqa
+
         self.win_viewer = WinViewer(
             self,
             settings={
                 'geometry_viewer': self.settings['geometry_viewer'],
             },
-            destroy_cb=lambda: self.enable_interface(True),
+            destroy_cb=destroy_cb,
             dat_dir=self.entry_dat.get(),
             tiger_dir=self.entry_tiger.get(),
             filepaths=filepaths,
